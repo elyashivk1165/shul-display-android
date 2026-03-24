@@ -122,8 +122,14 @@ object DeviceUtils {
             val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
             val level = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
             val charging = bm.isCharging
-            info.put("battery_level", level)
-            info.put("battery_charging", charging)
+            // level is -1 or Integer.MIN_VALUE on devices with no battery (e.g. Android TV plugged in)
+            if (level in 0..100) {
+                info.put("battery_level", level)
+                info.put("battery_charging", charging)
+            } else {
+                info.put("battery_level", null)
+                info.put("battery_charging", charging)
+            }
         } catch (_: Exception) {}
 
         // Uptime
