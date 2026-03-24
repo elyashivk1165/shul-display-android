@@ -16,8 +16,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v3
@@ -25,28 +23,27 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Generate keystore if not present
+      - name: Restore keystore cache
+        id: keystore-cache
+        uses: actions/cache@v4
+        with:
+          path: keystore.jks
+          key: signing-keystore-v1
+
+      - name: Generate keystore (first time only)
+        if: steps.keystore-cache.outputs.cache-hit != 'true'
         run: |
-          if [ ! -f keystore.jks ]; then
-            keytool -genkeypair \
-              -alias shuldisplay \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -keystore keystore.jks \
-              -storepass shuldisplay123 \
-              -keypass shuldisplay123 \
-              -dname "CN=Shul Display, OU=App, O=ShulDisplay, L=IL, ST=IL, C=IL" \
-              -noprompt
-            git config user.email "elyashivk1165@gmail.com"
-            git config user.name "Tohar"
-            git add keystore.jks
-            git commit -m "Add signing keystore [skip ci]"
-            git push origin HEAD:main
-            echo "Keystore generated and committed"
-          else
-            echo "Keystore already exists"
-          fi
+          keytool -genkeypair \
+            -alias shuldisplay \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -keystore keystore.jks \
+            -storepass shuldisplay123 \
+            -keypass shuldisplay123 \
+            -dname "CN=Shul Display, OU=App, O=ShulDisplay, L=IL, ST=IL, C=IL" \
+            -noprompt
+          echo "Keystore generated"
 
       - name: Make Gradle executable
         run: chmod +x ./gradlew
