@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Shul Display</string>
+    <string name="setup_title">Shul Display Setup</string>
+    <string name="slug_hint">Enter display slug</string>
+    <string name="connect_button">Connect</string>
+    <string name="slug_required">Please enter a slug</string>
+</resources>
