@@ -4,17 +4,15 @@
     android:layout_height="match_parent"
     android:gravity="center"
     android:orientation="vertical"
-    android:padding="32dp"
-    android:background="#FFFFFF">
+    android:padding="32dp">
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/setup_title"
-        android:textSize="28sp"
+        android:textSize="24sp"
         android:textStyle="bold"
-        android:textColor="#1976D2"
-        android:layout_marginBottom="32dp" />
+        android:layout_marginBottom="24dp" />
 
     <EditText
         android:id="@+id/slugInput"
@@ -22,20 +20,11 @@
         android:layout_height="wrap_content"
         android:hint="@string/slug_hint"
         android:inputType="text"
-        android:maxLines="1"
-        android:padding="16dp"
-        android:textSize="18sp"
-        android:layout_marginBottom="24dp"
-        android:background="@android:drawable/edit_text" />
+        android:layout_marginBottom="16dp" />
 
     <Button
-        android:id="@+id/connectButton"
-        android:layout_width="wrap_content"
+        android:id="@+id/saveButton"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/connect_button"
-        android:textSize="18sp"
-        android:paddingStart="32dp"
-        android:paddingEnd="32dp"
-        android:paddingTop="12dp"
-        android:paddingBottom="12dp" />
+        android:text="@string/save_and_start" />
 </LinearLayout>

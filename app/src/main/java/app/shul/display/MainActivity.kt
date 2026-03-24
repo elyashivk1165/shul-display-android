@@ -13,10 +13,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
-import java.util.concurrent.TimeUnit
+import androidx.appcompat.app.AppCompatDelegate
 
 class MainActivity : AppCompatActivity() {
 
@@ -30,6 +27,7 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
         super.onCreate(savedInstanceState)
         instance = this
 
@@ -38,7 +36,7 @@ class MainActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_main)
 
-        prefs = getSharedPreferences("shul_display", MODE_PRIVATE)
+        prefs = getSharedPreferences("shul_display_prefs", MODE_PRIVATE)
         val slug = prefs.getString("slug", "") ?: ""
 
         if (slug.isBlank()) {
@@ -49,9 +47,6 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.webView)
         setupWebView()
         webView.loadUrl(BASE_URL + slug)
-
-        DeviceRegistrar.register(this, slug)
-        scheduleCommandPoller()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -59,9 +54,6 @@ class MainActivity : AppCompatActivity() {
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
-            databaseEnabled = true
-            mediaPlaybackRequiresUserGesture = false
-            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             cacheMode = WebSettings.LOAD_DEFAULT
             useWideViewPort = true
             loadWithOverviewMode = true
@@ -69,7 +61,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.setBackgroundColor(android.graphics.Color.WHITE)
-
         webView.webViewClient = WebViewClient()
         webView.webChromeClient = WebChromeClient()
 
@@ -98,18 +89,6 @@ class MainActivity : AppCompatActivity() {
                     or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
             )
         }
-    }
-
-    private fun scheduleCommandPoller() {
-        val workRequest = PeriodicWorkRequestBuilder<CommandPollerWorker>(
-            30, TimeUnit.SECONDS
-        ).build()
-
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "command_poller",
-            ExistingPeriodicWorkPolicy.KEEP,
-            workRequest
-        )
     }
 
     fun reloadWebView() {

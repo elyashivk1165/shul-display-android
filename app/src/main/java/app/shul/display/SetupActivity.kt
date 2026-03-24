@@ -7,6 +7,13 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
 
 class SetupActivity : AppCompatActivity() {
 
@@ -15,7 +22,7 @@ class SetupActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        prefs = getSharedPreferences("shul_display", MODE_PRIVATE)
+        prefs = getSharedPreferences("shul_display_prefs", MODE_PRIVATE)
 
         val existingSlug = prefs.getString("slug", null)
         if (!existingSlug.isNullOrBlank()) {
@@ -26,9 +33,9 @@ class SetupActivity : AppCompatActivity() {
         setContentView(R.layout.activity_setup)
 
         val slugInput = findViewById<EditText>(R.id.slugInput)
-        val connectButton = findViewById<Button>(R.id.connectButton)
+        val saveButton = findViewById<Button>(R.id.saveButton)
 
-        connectButton.setOnClickListener {
+        saveButton.setOnClickListener {
             val slug = slugInput.text.toString().trim()
             if (slug.isEmpty()) {
                 Toast.makeText(this, R.string.slug_required, Toast.LENGTH_SHORT).show()
@@ -37,10 +44,27 @@ class SetupActivity : AppCompatActivity() {
 
             prefs.edit().putString("slug", slug).apply()
 
-            DeviceRegistrar.register(this, slug)
+            val deviceId = DeviceUtils.getDeviceId(this)
+            val appVersion = DeviceUtils.getAppVersion(this)
+            CoroutineScope(Dispatchers.IO).launch {
+                SupabaseClient.registerDevice(deviceId, slug, appVersion)
+            }
 
+            scheduleCommandPoller()
             launchMainActivity()
         }
+    }
+
+    private fun scheduleCommandPoller() {
+        val workRequest = PeriodicWorkRequestBuilder<CommandPollingWorker>(
+            15, TimeUnit.MINUTES
+        ).build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "command_poller",
+            ExistingPeriodicWorkPolicy.KEEP,
+            workRequest
+        )
     }
 
     private fun launchMainActivity() {

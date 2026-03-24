@@ -3,6 +3,6 @@
     <string name="app_name">Shul Display</string>
     <string name="setup_title">Shul Display Setup</string>
     <string name="slug_hint">Enter display slug</string>
-    <string name="connect_button">Connect</string>
+    <string name="save_and_start">Save &amp; Start</string>
     <string name="slug_required">Please enter a slug</string>
 </resources>
