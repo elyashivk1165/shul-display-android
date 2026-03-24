@@ -11,7 +11,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import kotlinx.coroutines.CoroutineScope
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
@@ -52,7 +52,7 @@ class SetupActivity : AppCompatActivity() {
 
             val deviceId = DeviceUtils.getDeviceId(this)
             val appVersion = DeviceUtils.getAppVersion(this)
-            CoroutineScope(Dispatchers.IO).launch {
+            lifecycleScope.launch(Dispatchers.IO) {
                 try {
                     SupabaseClient.registerDevice(deviceId, slug, appVersion)
                 } catch (e: Exception) {

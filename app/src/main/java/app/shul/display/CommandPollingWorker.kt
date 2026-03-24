@@ -1,6 +1,7 @@
 package app.shul.display
 
 import android.content.Context
+import android.content.Intent
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -43,6 +44,34 @@ class CommandPollingWorker(
                             SupabaseClient.updateDeviceSlug(deviceId, newSlug)
                             if (activity != null && !activity.isDestroyed && !activity.isFinishing) {
                                 activity.updateSlug(newSlug)
+                            }
+                        }
+                    }
+                    "RESTART_APP" -> {
+                        val intent = applicationContext.packageManager
+                            .getLaunchIntentForPackage(applicationContext.packageName)
+                        intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                        if (intent != null) applicationContext.startActivity(intent)
+                        Runtime.getRuntime().exit(0)
+                    }
+                    "CLEAR_CACHE" -> {
+                        if (activity != null && !activity.isDestroyed && !activity.isFinishing) {
+                            activity.clearWebViewCache()
+                        } else {
+                            Log.w(TAG, "CLEAR_CACHE skipped — activity not available")
+                        }
+                    }
+                    "PING" -> {
+                        val info = DeviceUtils.getFullDeviceInfo(applicationContext)
+                        SupabaseClient.updateLastSeen(deviceId, info)
+                    }
+                    "UPDATE_APP" -> {
+                        val currentVersion = DeviceUtils.getAppVersion(applicationContext)
+                        val release = UpdateChecker.checkForUpdate(currentVersion)
+                        if (release != null) {
+                            Log.i(TAG, "UPDATE_APP command: installing ${release.version}")
+                            UpdateChecker.downloadAndInstall(applicationContext, release) { status ->
+                                Log.i(TAG, "UPDATE_APP status: $status")
                             }
                         }
                     }

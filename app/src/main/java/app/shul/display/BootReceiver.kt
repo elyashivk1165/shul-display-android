@@ -34,6 +34,13 @@ class BootReceiver : BroadcastReceiver() {
                     Log.e(TAG, "Failed to start BootForegroundService", e)
                 }
 
+                // Start persistent display service
+                try {
+                    DisplayForegroundService.start(context)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to start DisplayForegroundService", e)
+                }
+
                 try {
                     val workRequest = PeriodicWorkRequestBuilder<CommandPollingWorker>(
                         15, TimeUnit.MINUTES

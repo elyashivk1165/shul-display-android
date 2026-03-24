@@ -25,7 +25,6 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -37,7 +36,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var prefs: SharedPreferences
     private lateinit var reloadOverlay: TextView
-    private var pollingJob: Job? = null
+    private var lastSuccessfulLoad = System.currentTimeMillis()
 
     companion object {
         private const val TAG = "MainActivity"
@@ -74,21 +73,18 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
-        // Register / refresh device in Supabase (runs every launch to catch missed registrations)
+        // Register / refresh device in Supabase
         lifecycleScope.launch(Dispatchers.IO) {
             val deviceId = DeviceUtils.getDeviceId(applicationContext)
             val appVersion = DeviceUtils.getAppVersion(applicationContext)
             SupabaseClient.registerDevice(deviceId, slug, appVersion)
         }
 
-        // Silent update check on startup
-        checkForUpdateSilent()
+        // Start persistent background service
+        DisplayForegroundService.start(this)
 
-        // Start foreground command polling (every 30 seconds while app is open)
-        startCommandPolling()
-
-        // Background auto-update checker
-        startAutoUpdateChecker()
+        // Start WebView watchdog
+        startWebViewWatchdog()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -128,6 +124,10 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                lastSuccessfulLoad = System.currentTimeMillis()
+            }
         }
         webView.webChromeClient = WebChromeClient()
 
@@ -136,6 +136,69 @@ class MainActivity : AppCompatActivity() {
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             @Suppress("DEPRECATION")
             webView.settings.forceDark = WebSettings.FORCE_DARK_OFF
+        }
+
+        // WebView renderer priority
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_BOUND, true)
+        }
+    }
+
+    // ── WebView watchdog ─────────────────────────────────────────────────────
+
+    private fun startWebViewWatchdog() {
+        lifecycleScope.launch {
+            while (isActive) {
+                delay(60_000)
+                val elapsed = System.currentTimeMillis() - lastSuccessfulLoad
+                if (elapsed > 5 * 60_000L) {
+                    Log.w(TAG, "WebView watchdog: no successful load in ${elapsed/1000}s, force reloading")
+                    withContext(Dispatchers.Main) {
+                        if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
+                            val slug = prefs.getString("slug", "") ?: ""
+                            webView.loadUrl(BASE_URL + slug)
+                        }
+                    }
+                    lastSuccessfulLoad = System.currentTimeMillis()
+                }
+            }
+        }
+    }
+
+    // ── Public methods for DisplayForegroundService ──────────────────────────
+
+    fun reloadWebViewWithIndicator() {
+        if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
+            reloadOverlay?.visibility = View.VISIBLE
+            lifecycleScope.launch {
+                delay(800)
+                reloadOverlay?.visibility = View.GONE
+                webView.reload()
+            }
+        }
+    }
+
+    fun clearWebViewCache() {
+        if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
+            webView.clearCache(true)
+            webView.reload()
+        }
+    }
+
+    fun reloadWebView() {
+        runOnUiThread {
+            if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
+                webView.reload()
+            }
+        }
+    }
+
+    fun updateSlug(newSlug: String) {
+        prefs.edit().putString("slug", newSlug).apply()
+        runOnUiThread {
+            if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
+                webView.loadUrl(BASE_URL + newSlug)
+            }
         }
     }
 
@@ -193,19 +256,7 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    // ── Update checker ──────────────────────────────────────────────────────
-
-    private fun checkForUpdateSilent() {
-        val currentVersion = DeviceUtils.getAppVersion(this)
-        lifecycleScope.launch(Dispatchers.IO) {
-            val release = UpdateChecker.checkForUpdate(currentVersion) ?: return@launch
-            withContext(Dispatchers.Main) {
-                if (!isDestroyed && !isFinishing) {
-                    showUpdateDialog(release, silent = true)
-                }
-            }
-        }
-    }
+    // ── Update checker (manual only — auto-update moved to service) ─────────
 
     private fun checkForUpdateManual() {
         val currentVersion = DeviceUtils.getAppVersion(this)
@@ -217,37 +268,13 @@ class MainActivity : AppCompatActivity() {
                 if (release == null) {
                     Toast.makeText(this@MainActivity, "✓ הגרסה עדכנית (v$currentVersion)", Toast.LENGTH_LONG).show()
                 } else {
-                    showUpdateDialog(release, silent = false)
+                    showUpdateDialog(release)
                 }
             }
         }
     }
 
-    private fun startAutoUpdateChecker() {
-        lifecycleScope.launch(Dispatchers.IO) {
-            delay(60_000) // Wait 60s after launch before first check
-            while (isActive) {
-                try {
-                    val currentVersion = DeviceUtils.getAppVersion(applicationContext)
-                    val release = UpdateChecker.checkForUpdate(currentVersion)
-                    if (release != null) {
-                        Log.i(TAG, "Auto-update available: ${release.version}, downloading...")
-                        UpdateChecker.downloadAndInstall(applicationContext, release) { status ->
-                            Log.i(TAG, "Auto-update status: $status")
-                        }
-                        delay(10 * 60_000) // 10 minutes after triggering install
-                    } else {
-                        delay(4 * 60 * 60_000) // Check every 4 hours if up to date
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Auto-update check failed", e)
-                    delay(30 * 60_000) // Retry in 30 min on error
-                }
-            }
-        }
-    }
-
-    private fun showUpdateDialog(release: ReleaseInfo, silent: Boolean) {
+    private fun showUpdateDialog(release: ReleaseInfo) {
         val msg = buildString {
             append("גרסה חדשה ${release.version} זמינה.")
             if (release.releaseNotes.isNotBlank()) {
@@ -269,7 +296,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
-            .setNegativeButton(if (silent) "אחר כך" else "סגור", null)
+            .setNegativeButton("סגור", null)
             .show()
     }
 
@@ -294,97 +321,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ── Foreground command polling ───────────────────────────────────────────
-
-    private fun startCommandPolling() {
-        val deviceId = DeviceUtils.getDeviceId(this)
-        pollingJob = lifecycleScope.launch(Dispatchers.IO) {
-            while (isActive) {
-                try {
-                    val commands = SupabaseClient.getPendingCommands(deviceId)
-                    for (cmd in commands) {
-                        try {
-                            when (cmd.command) {
-                                "RELOAD" -> withContext(Dispatchers.Main) {
-                                    if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
-                                        reloadOverlay.visibility = View.VISIBLE
-                                        delay(800)
-                                        reloadOverlay.visibility = View.GONE
-                                        webView.reload()
-                                    }
-                                }
-                                "UPDATE_SLUG" -> {
-                                    val newSlug = cmd.payload["slug"] as? String
-                                    if (!newSlug.isNullOrBlank()) {
-                                        prefs.edit().putString("slug", newSlug).apply()
-                                        SupabaseClient.updateDeviceSlug(deviceId, newSlug)
-                                        withContext(Dispatchers.Main) {
-                                            if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
-                                                webView.loadUrl(BASE_URL + newSlug)
-                                            }
-                                        }
-                                    }
-                                }
-                                "RESTART_APP" -> {
-                                    val intent = applicationContext.packageManager
-                                        .getLaunchIntentForPackage(applicationContext.packageName)
-                                    intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                                    applicationContext.startActivity(intent)
-                                    Runtime.getRuntime().exit(0)
-                                }
-                                "CLEAR_CACHE" -> withContext(Dispatchers.Main) {
-                                    if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
-                                        webView.clearCache(true)
-                                        webView.reload()
-                                    }
-                                }
-                                "PING" -> {
-                                    val info = DeviceUtils.getFullDeviceInfo(applicationContext)
-                                    SupabaseClient.updateLastSeen(deviceId, info)
-                                }
-                                "UPDATE_APP" -> {
-                                    val currentVersion = DeviceUtils.getAppVersion(applicationContext)
-                                    val release = UpdateChecker.checkForUpdate(currentVersion)
-                                    if (release != null) {
-                                        Log.i(TAG, "UPDATE_APP command: installing ${release.version}")
-                                        UpdateChecker.downloadAndInstall(applicationContext, release) { status ->
-                                            Log.i(TAG, "UPDATE_APP status: $status")
-                                        }
-                                    }
-                                }
-                            }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error executing command ${cmd.command}", e)
-                        }
-                        SupabaseClient.markCommandExecuted(cmd.id)
-                    }
-                    val deviceInfo = DeviceUtils.getFullDeviceInfo(applicationContext)
-                    SupabaseClient.updateLastSeen(deviceId, deviceInfo)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Command polling error", e)
-                }
-                delay(30_000)
-            }
-        }
-    }
-
-    fun reloadWebView() {
-        runOnUiThread {
-            if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
-                webView.reload()
-            }
-        }
-    }
-
-    fun updateSlug(newSlug: String) {
-        prefs.edit().putString("slug", newSlug).apply()
-        runOnUiThread {
-            if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
-                webView.loadUrl(BASE_URL + newSlug)
-            }
-        }
-    }
-
     override fun onPause() {
         super.onPause()
         if (::webView.isInitialized) {
@@ -402,7 +338,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        pollingJob?.cancel()
         instanceRef = null
         if (::webView.isInitialized) webView.destroy()
         super.onDestroy()
