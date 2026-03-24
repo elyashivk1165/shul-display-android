@@ -189,19 +189,26 @@ class MainActivity : AppCompatActivity() {
 
     fun reloadWebViewWithIndicator() {
         if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
-            reloadOverlay?.visibility = View.VISIBLE
-            lifecycleScope.launch {
-                delay(800)
-                reloadOverlay?.visibility = View.GONE
-                webView.reload()
+            runOnUiThread {
+                if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
+                    reloadOverlay?.visibility = View.VISIBLE
+                    webView.postDelayed({
+                        if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
+                            reloadOverlay?.visibility = View.GONE
+                            webView.reload()
+                        }
+                    }, 800)
+                }
             }
         }
     }
 
     fun clearWebViewCache() {
-        if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
-            webView.clearCache(true)
-            webView.reload()
+        runOnUiThread {
+            if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
+                webView.clearCache(true)
+                webView.reload()
+            }
         }
     }
 

@@ -162,9 +162,8 @@ class DisplayForegroundService : Service() {
         when (cmd.command) {
             "RELOAD" -> {
                 if (activity == null) throw IllegalStateException("אפליקציה לא פעילה")
-                withContext(Dispatchers.Main) {
-                    activity.reloadWebViewWithIndicator()
-                }
+                // reloadWebViewWithIndicator uses runOnUiThread internally — safe to call from any thread
+                activity.reloadWebViewWithIndicator()
             }
             "UPDATE_SLUG" -> {
                 val newSlug = cmd.payload["slug"] as? String
@@ -174,14 +173,15 @@ class DisplayForegroundService : Service() {
                         .edit().putString("slug", newSlug).apply()
                     SupabaseClient.updateDeviceSlug(deviceId, newSlug)
                     if (activity == null) throw IllegalStateException("אפליקציה לא פעילה")
-                    withContext(Dispatchers.Main) {
-                        activity.updateSlug(newSlug)
-                    }
+                    // updateSlug uses runOnUiThread internally — safe to call from any thread
+                    activity.updateSlug(newSlug)
                 }
             }
             "RESTART_APP" -> {
                 // Sync write before exit
                 getSharedPreferences("shul_display_prefs", MODE_PRIVATE).edit().commit()
+                // Report result BEFORE restarting — exit(0) kills the process immediately
+                SupabaseClient.reportCommandResult(cmd.id, "success")
                 val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
                 if (launchIntent != null) {
                     launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
@@ -192,9 +192,8 @@ class DisplayForegroundService : Service() {
             }
             "CLEAR_CACHE" -> {
                 if (activity == null) throw IllegalStateException("אפליקציה לא פעילה")
-                withContext(Dispatchers.Main) {
-                    activity.clearWebViewCache()
-                }
+                // clearWebViewCache uses runOnUiThread internally — safe to call from any thread
+                activity.clearWebViewCache()
             }
             "PING" -> {
                 val deviceId = DeviceUtils.getDeviceId(applicationContext)
