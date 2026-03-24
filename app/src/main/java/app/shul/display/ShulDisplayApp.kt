@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -18,11 +19,14 @@ class ShulDisplayApp : Application() {
         var appStartTime: Long = 0L
     }
 
+    // Application-scoped coroutine scope — lives for the lifetime of the process
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onCreate() {
         super.onCreate()
         appStartTime = SystemClock.elapsedRealtime()
 
-        // Send any crash from previous session
+        // Send any crash from previous session (using application scope, not bare CoroutineScope)
         sendPendingCrash()
 
         // Force light mode globally — must happen before any Activity is created
@@ -96,8 +100,8 @@ class ShulDisplayApp : Application() {
     private fun sendPendingCrash() {
         val prefs = getSharedPreferences("crash_data", MODE_PRIVATE)
         val stack = prefs.getString("pending_crash_stack", null) ?: return
-        // Send in background
-        CoroutineScope(Dispatchers.IO).launch {
+        // Send in background using the application-scoped coroutine scope
+        applicationScope.launch {
             try {
                 val deviceId = DeviceUtils.getDeviceId(this@ShulDisplayApp)
                 val body = JSONObject().apply {

@@ -17,6 +17,11 @@ object ScreenScheduleManager {
     private const val PREFS_NAME = "screen_schedule_prefs"
 
     fun setSchedule(context: Context, offTime: String?, onTime: String?) {
+        // Guard: off_time and on_time must differ; identical times would fire simultaneously
+        if (offTime != null && onTime != null && offTime == onTime) {
+            Log.w(TAG, "setSchedule ignored: off_time == on_time ($offTime)")
+            return
+        }
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit()
             .putString("off_time", offTime)

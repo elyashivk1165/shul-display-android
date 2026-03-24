@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import android.os.Build
 import android.util.Log
 
 class InstallResultReceiver : BroadcastReceiver() {
@@ -17,7 +18,13 @@ class InstallResultReceiver : BroadcastReceiver() {
             }
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                 Log.w("InstallReceiver", "User action required — showing dialog")
-                val confirmIntent = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+                // Use type-safe API on Android 13+, deprecated form on older versions
+                val confirmIntent: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(Intent.EXTRA_INTENT)
+                }
                 confirmIntent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 if (confirmIntent != null) context.startActivity(confirmIntent)
             }

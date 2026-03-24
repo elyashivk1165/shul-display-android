@@ -145,6 +145,38 @@ object SupabaseClient {
         }
     }
 
+    /**
+     * Write result and result_message back to the device_commands row so
+     * the admin panel can poll for completion status.
+     */
+    suspend fun reportCommandResult(commandId: String, result: String, message: String = "") {
+        withContext(Dispatchers.IO) {
+            try {
+                val body = JSONObject().apply {
+                    put("executed_at", nowIso())
+                    put("result", result)
+                    if (message.isNotBlank()) put("result_message", message)
+                }
+
+                val url = URL("$SUPABASE_URL/rest/v1/device_commands?id=eq.$commandId")
+                val conn = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "PATCH"
+                    doOutput = true
+                    connectTimeout = 10_000
+                    readTimeout = 10_000
+                    headers().forEach { (k, v) -> setRequestProperty(k, v) }
+                }
+
+                conn.outputStream.bufferedWriter().use { it.write(body.toString()) }
+                val code = conn.responseCode
+                Log.d(TAG, "reportCommandResult response: $code")
+                conn.disconnect()
+            } catch (e: Exception) {
+                Log.e(TAG, "reportCommandResult failed", e)
+            }
+        }
+    }
+
     suspend fun updateDeviceSlug(deviceId: String, newSlug: String) {
         withContext(Dispatchers.IO) {
             try {

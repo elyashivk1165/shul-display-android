@@ -31,11 +31,22 @@ class DisplayForegroundService : Service() {
         Log.e(TAG, "Coroutine exception", e)
     }
 
+    // Track polling/heartbeat jobs so we never launch duplicates on START_STICKY restarts
+    private var pollingJob: Job? = null
+    private var heartbeatJob: Job? = null
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
-        startCommandPolling()
-        startHeartbeat()
+
+        // Guard: don't launch duplicate coroutines on START_STICKY restarts
+        if (pollingJob?.isActive != true) {
+            pollingJob = startCommandPolling()
+        }
+        if (heartbeatJob?.isActive != true) {
+            heartbeatJob = startHeartbeat()
+        }
+
         return START_STICKY
     }
 
@@ -63,8 +74,8 @@ class DisplayForegroundService : Service() {
             .build()
     }
 
-    private fun startCommandPolling() {
-        serviceScope.launch(exceptionHandler) {
+    private fun startCommandPolling(): Job {
+        return serviceScope.launch(exceptionHandler) {
             val deviceId = DeviceUtils.getDeviceId(applicationContext)
             val backoff = ExponentialBackoff()
             while (isActive) {
@@ -73,10 +84,13 @@ class DisplayForegroundService : Service() {
                     for (cmd in commands) {
                         try {
                             executeCommand(cmd)
-                            SupabaseClient.markCommandExecuted(cmd.id)
+                            SupabaseClient.reportCommandResult(cmd.id, "success")
                         } catch (e: Exception) {
                             Log.e(TAG, "Failed to execute command ${cmd.command}", e)
-                            SupabaseClient.markCommandExecuted(cmd.id)
+                            SupabaseClient.reportCommandResult(
+                                cmd.id, "error",
+                                e.message?.take(500) ?: "Unknown error"
+                            )
                         }
                     }
                     backoff.reset()
@@ -90,8 +104,8 @@ class DisplayForegroundService : Service() {
         }
     }
 
-    private fun startHeartbeat() {
-        serviceScope.launch(exceptionHandler) {
+    private fun startHeartbeat(): Job {
+        return serviceScope.launch(exceptionHandler) {
             val deviceId = DeviceUtils.getDeviceId(applicationContext)
             val backoff = ExponentialBackoff()
             while (isActive) {
@@ -132,11 +146,11 @@ class DisplayForegroundService : Service() {
             "RESTART_APP" -> {
                 // Sync write before exit
                 getSharedPreferences("shul_display_prefs", MODE_PRIVATE).edit().commit()
-                val intent = packageManager.getLaunchIntentForPackage(packageName)
-                if (intent != null) {
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                    startActivity(intent)
-                    Thread.sleep(300)
+                val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+                if (launchIntent != null) {
+                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    startActivity(launchIntent)
+                    delay(300) // coroutine-safe delay instead of Thread.sleep
                 }
                 Runtime.getRuntime().exit(0)
             }
@@ -168,7 +182,11 @@ class DisplayForegroundService : Service() {
             "SET_SCHEDULE" -> {
                 val offTime = cmd.payload["off_time"] as? String
                 val onTime = cmd.payload["on_time"] as? String
-                ScreenScheduleManager.setSchedule(applicationContext, offTime, onTime)
+                if (offTime != null && onTime != null && offTime != onTime) {
+                    ScreenScheduleManager.setSchedule(applicationContext, offTime, onTime)
+                } else if (offTime != null && onTime != null) {
+                    Log.w(TAG, "SET_SCHEDULE ignored: off_time == on_time ($offTime)")
+                }
             }
             "CLEAR_SCHEDULE" -> {
                 ScreenScheduleManager.setSchedule(applicationContext, null, null)
@@ -177,7 +195,25 @@ class DisplayForegroundService : Service() {
         }
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // Restart the service if it gets removed from recents
+        val restartIntent = Intent(applicationContext, DisplayForegroundService::class.java)
+        val pendingIntent = PendingIntent.getService(
+            applicationContext, 1, restartIntent,
+            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        alarmManager.set(
+            AlarmManager.RTC_WAKEUP,
+            System.currentTimeMillis() + 5_000,
+            pendingIntent
+        )
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
+        pollingJob?.cancel()
+        heartbeatJob?.cancel()
         serviceScope.cancel()
         super.onDestroy()
     }
