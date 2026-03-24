@@ -19,6 +19,9 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -26,6 +29,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var prefs: SharedPreferences
+    private var pollingJob: Job? = null
 
     companion object {
         const val BASE_URL = "https://shul-display.vercel.app/"
@@ -68,6 +72,9 @@ class MainActivity : AppCompatActivity() {
 
         // Silent update check on startup
         checkForUpdateSilent()
+
+        // Start foreground command polling (every 30 seconds while app is open)
+        startCommandPolling()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -216,6 +223,35 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ── Foreground command polling ───────────────────────────────────────────
+
+    private fun startCommandPolling() {
+        val deviceId = DeviceUtils.getDeviceId(this)
+        pollingJob = CoroutineScope(Dispatchers.IO).launch {
+            while (isActive) {
+                try {
+                    val commands = SupabaseClient.getPendingCommands(deviceId)
+                    for (cmd in commands) {
+                        when (cmd.command) {
+                            "RELOAD" -> runOnUiThread { webView.reload() }
+                            "UPDATE_SLUG" -> {
+                                val newSlug = cmd.payload["slug"] as? String
+                                if (!newSlug.isNullOrBlank()) {
+                                    prefs.edit().putString("slug", newSlug).apply()
+                                    SupabaseClient.updateDeviceSlug(deviceId, newSlug)
+                                    runOnUiThread { webView.loadUrl(BASE_URL + newSlug) }
+                                }
+                            }
+                        }
+                        SupabaseClient.markCommandExecuted(cmd.id)
+                    }
+                    SupabaseClient.updateLastSeen(deviceId)
+                } catch (_: Exception) {}
+                delay(30_000)
+            }
+        }
+    }
+
     fun reloadWebView() {
         runOnUiThread { webView.reload() }
     }
@@ -226,6 +262,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        pollingJob?.cancel()
         instance = null
         super.onDestroy()
     }
