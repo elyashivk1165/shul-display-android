@@ -12,12 +12,9 @@ import java.util.Calendar
 
 object ScreenScheduleManager {
     private const val TAG = "ScreenSchedule"
-    private const val ACTION_SCREEN_OFF = "app.shul.display.SCREEN_OFF"
-    private const val ACTION_SCREEN_ON = "app.shul.display.SCREEN_ON"
     private const val PREFS_NAME = "screen_schedule_prefs"
 
-    fun setSchedule(context: Context, offTime: String?, onTime: String?) {
-        // Guard: off_time and on_time must differ; identical times would fire simultaneously
+    fun setSchedule(context: Context, offTime: String?, onTime: String?, days: List<Int> = (0..6).toList()) {
         if (offTime != null && onTime != null && offTime == onTime) {
             Log.w(TAG, "setSchedule ignored: off_time == on_time ($offTime)")
             return
@@ -27,18 +24,76 @@ object ScreenScheduleManager {
             .putString("off_time", offTime)
             .putString("on_time", onTime)
             .putBoolean("enabled", offTime != null && onTime != null)
+            .putString("schedule_days", if (offTime != null && onTime != null) days.joinToString(",") else null)
             .apply()
         cancelAlarms(context)
         if (offTime != null && onTime != null) {
-            scheduleAlarm(context, offTime, ACTION_SCREEN_OFF)
-            scheduleAlarm(context, onTime, ACTION_SCREEN_ON)
-            Log.i(TAG, "Schedule set: OFF=$offTime, ON=$onTime")
+            val offParts = offTime.split(":").map { it.toIntOrNull() ?: 0 }
+            val onParts = onTime.split(":").map { it.toIntOrNull() ?: 0 }
+            val offHour = offParts.getOrElse(0) { 0 }.coerceIn(0, 23)
+            val offMin = offParts.getOrElse(1) { 0 }.coerceIn(0, 59)
+            val onHour = onParts.getOrElse(0) { 0 }.coerceIn(0, 23)
+            val onMin = onParts.getOrElse(1) { 0 }.coerceIn(0, 59)
+
+            for (day in days) {
+                scheduleAlarmForDay(context, offHour, offMin, day, "SCREEN_OFF", 1000 + day)
+                scheduleAlarmForDay(context, onHour, onMin, day, "SCREEN_ON", 2000 + day)
+            }
+            Log.i(TAG, "Schedule set: OFF=$offTime, ON=$onTime, days=$days")
         }
     }
 
-    fun getSchedule(context: Context): Pair<String?, String?> {
+    fun scheduleAlarmForDay(context: Context, hour: Int, minute: Int, day: Int, action: String, requestCode: Int) {
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.DAY_OF_WEEK, day + 1) // 0→Sunday(1), 1→Monday(2), etc.
+            set(Calendar.HOUR_OF_DAY, hour)
+            set(Calendar.MINUTE, minute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+            if (timeInMillis <= System.currentTimeMillis()) {
+                add(Calendar.WEEK_OF_YEAR, 1)
+            }
+        }
+
+        val intent = Intent(context, ScreenAlarmReceiver::class.java).apply {
+            this.action = "app.shul.display.$action"
+            putExtra("request_code", requestCode)
+        }
+        val pi = PendingIntent.getBroadcast(
+            context, requestCode, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, cal.timeInMillis, pi)
+        } else {
+            alarmManager.setExact(AlarmManager.RTC_WAKEUP, cal.timeInMillis, pi)
+        }
+        Log.i(TAG, "Alarm scheduled: $action day=$day (calDay=${day+1}) at $hour:$minute rc=$requestCode (${cal.time})")
+    }
+
+    private fun cancelAlarms(context: Context) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        for (i in 0..6) {
+            for (base in listOf(1000, 2000)) {
+                val intent = Intent(context, ScreenAlarmReceiver::class.java)
+                val pi = PendingIntent.getBroadcast(
+                    context, base + i, intent,
+                    PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+                )
+                pi?.let { alarmManager.cancel(it) }
+            }
+        }
+    }
+
+    fun getSchedule(context: Context): Triple<String?, String?, List<Int>> {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return Pair(prefs.getString("off_time", null), prefs.getString("on_time", null))
+        val off = prefs.getString("off_time", null)
+        val on = prefs.getString("on_time", null)
+        val daysStr = prefs.getString("schedule_days", null)
+        val days = daysStr?.split(",")?.mapNotNull { it.toIntOrNull() } ?: (0..6).toList()
+        return Triple(off, on, days)
     }
 
     fun isEnabled(context: Context): Boolean {
@@ -90,65 +145,11 @@ object ScreenScheduleManager {
         }
     }
 
-    private fun scheduleAlarm(context: Context, time: String, action: String) {
-        val parts = time.split(":").map { it.toIntOrNull() ?: -1 }
-        val hour = parts.getOrElse(0) { -1 }
-        val minute = parts.getOrElse(1) { -1 }
-        if (hour !in 0..23 || minute !in 0..59) {
-            Log.e(TAG, "Invalid time: $time")
-            return
-        }
-
-        val calendar = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, hour)
-            set(Calendar.MINUTE, minute)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-            if (timeInMillis <= System.currentTimeMillis()) {
-                add(Calendar.DAY_OF_YEAR, 1)
-            }
-        }
-
-        val intent = Intent(context, ScreenAlarmReceiver::class.java).apply {
-            this.action = action
-        }
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            action.hashCode(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                calendar.timeInMillis,
-                pendingIntent
-            )
-        } else {
-            alarmManager.setExact(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pendingIntent)
-        }
-        Log.i(TAG, "Alarm scheduled: $action at $time (${calendar.time})")
-    }
-
-    private fun cancelAlarms(context: Context) {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        for (action in listOf(ACTION_SCREEN_OFF, ACTION_SCREEN_ON)) {
-            val intent = Intent(context, ScreenAlarmReceiver::class.java).apply { this.action = action }
-            val pi = PendingIntent.getBroadcast(
-                context, action.hashCode(), intent,
-                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-            )
-            pi?.let { alarmManager.cancel(it) }
-        }
-    }
-
     fun rescheduleAfterBoot(context: Context) {
         if (!isEnabled(context)) return
-        val (offTime, onTime) = getSchedule(context)
+        val (offTime, onTime, days) = getSchedule(context)
         if (offTime != null && onTime != null) {
-            setSchedule(context, offTime, onTime)
+            setSchedule(context, offTime, onTime, days)
             Log.i(TAG, "Alarms rescheduled after boot")
         }
     }

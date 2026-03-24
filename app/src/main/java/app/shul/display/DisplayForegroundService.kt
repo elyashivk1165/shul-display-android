@@ -225,8 +225,14 @@ class DisplayForegroundService : Service() {
             "SET_SCHEDULE" -> {
                 val offTime = cmd.payload["off_time"] as? String
                 val onTime = cmd.payload["on_time"] as? String
+                val daysRaw = cmd.payload["days"]
+                val days: List<Int> = when (daysRaw) {
+                    is org.json.JSONArray -> (0 until daysRaw.length()).map { daysRaw.getInt(it) }
+                    is List<*> -> daysRaw.mapNotNull { (it as? Number)?.toInt() }
+                    else -> (0..6).toList()
+                }
                 if (offTime != null && onTime != null && offTime != onTime) {
-                    ScreenScheduleManager.setSchedule(applicationContext, offTime, onTime)
+                    ScreenScheduleManager.setSchedule(applicationContext, offTime, onTime, days)
                 } else if (offTime != null && onTime != null) {
                     Log.w(TAG, "SET_SCHEDULE ignored: off_time == on_time ($offTime)")
                 }
