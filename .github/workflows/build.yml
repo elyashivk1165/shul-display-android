@@ -23,28 +23,6 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Restore keystore cache
-        id: keystore-cache
-        uses: actions/cache@v4
-        with:
-          path: keystore.jks
-          key: signing-keystore-v1
-
-      - name: Generate keystore (first time only)
-        if: steps.keystore-cache.outputs.cache-hit != 'true'
-        run: |
-          keytool -genkeypair \
-            -alias shuldisplay \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -keystore keystore.jks \
-            -storepass shuldisplay123 \
-            -keypass shuldisplay123 \
-            -dname "CN=Shul Display, OU=App, O=ShulDisplay, L=IL, ST=IL, C=IL" \
-            -noprompt
-          echo "Keystore generated"
-
       - name: Make Gradle executable
         run: chmod +x ./gradlew
 
