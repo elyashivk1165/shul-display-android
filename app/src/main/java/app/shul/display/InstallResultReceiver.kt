@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.os.Build
 import android.util.Log
+import java.io.File
 
 class InstallResultReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -15,6 +16,13 @@ class InstallResultReceiver : BroadcastReceiver() {
         when (status) {
             PackageInstaller.STATUS_SUCCESS -> {
                 Log.i("InstallReceiver", "Silent install succeeded")
+                // Clean up cached APK
+                try {
+                    val apkFile = File(context.cacheDir, "update.apk")
+                    if (apkFile.exists()) apkFile.delete()
+                } catch (e: Exception) {
+                    Log.w("InstallReceiver", "Could not delete cached APK: ${e.message}")
+                }
             }
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                 Log.w("InstallReceiver", "User action required — showing dialog")

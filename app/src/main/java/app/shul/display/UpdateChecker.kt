@@ -107,8 +107,10 @@ object UpdateChecker {
                 }
                 val code = conn.responseCode
                 if (code in 300..399) {
-                    downloadUrl = conn.getHeaderField("Location") ?: break
+                    val location = conn.getHeaderField("Location")
                     conn.disconnect()
+                    if (location == null) break
+                    downloadUrl = location
                     redirects++
                     continue
                 }
@@ -160,22 +162,26 @@ object UpdateChecker {
 
                 val sessionId = packageInstaller.createSession(params)
                 val session = packageInstaller.openSession(sessionId)
+                try {
+                    session.openWrite("package", 0, apkFile.length()).use { outputStream ->
+                        apkFile.inputStream().use { it.copyTo(outputStream) }
+                        session.fsync(outputStream)
+                    }
 
-                session.openWrite("package", 0, apkFile.length()).use { outputStream ->
-                    apkFile.inputStream().use { it.copyTo(outputStream) }
-                    session.fsync(outputStream)
+                    val intent = Intent(context, InstallResultReceiver::class.java).apply {
+                        action = "app.shul.display.INSTALL_COMPLETE"
+                    }
+                    val pendingIntent = PendingIntent.getBroadcast(
+                        context, sessionId, intent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+                    )
+
+                    session.commit(pendingIntent.intentSender)
+                    session.close()
+                } catch (e: Exception) {
+                    session.abandon()
+                    throw e
                 }
-
-                val intent = Intent(context, InstallResultReceiver::class.java).apply {
-                    action = "app.shul.display.INSTALL_COMPLETE"
-                }
-                val pendingIntent = PendingIntent.getBroadcast(
-                    context, sessionId, intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-                )
-
-                session.commit(pendingIntent.intentSender)
-                session.close()
 
                 onStatus("מתקין עדכון...")
             } catch (e: Exception) {
