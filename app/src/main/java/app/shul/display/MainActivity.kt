@@ -1,6 +1,8 @@
 package app.shul.display
 
 import android.annotation.SuppressLint
+import android.app.AlertDialog
+import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Build
 import android.os.Bundle
@@ -12,6 +14,9 @@ import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
@@ -24,7 +29,7 @@ class MainActivity : AppCompatActivity() {
         var instance: MainActivity? = null
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
+    @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         instance = this
@@ -32,8 +37,6 @@ class MainActivity : AppCompatActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         setContentView(R.layout.activity_main)
-
-        // Must be called after setContentView so the window decorView is ready
         enableFullscreen()
 
         prefs = getSharedPreferences("shul_display_prefs", MODE_PRIVATE)
@@ -47,6 +50,12 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.webView)
         setupWebView()
         webView.loadUrl(BASE_URL + slug)
+
+        // Long press anywhere on the screen → open settings dialog
+        webView.setOnLongClickListener {
+            showSettingsDialog()
+            true
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -70,6 +79,39 @@ class MainActivity : AppCompatActivity() {
             @Suppress("DEPRECATION")
             webView.settings.forceDark = WebSettings.FORCE_DARK_OFF
         }
+    }
+
+    private fun showSettingsDialog() {
+        val currentSlug = prefs.getString("slug", "") ?: ""
+
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(60, 40, 60, 20)
+        }
+
+        val slugInput = EditText(this).apply {
+            hint = "Slug"
+            setText(currentSlug)
+            selectAll()
+        }
+        layout.addView(slugInput)
+
+        AlertDialog.Builder(this)
+            .setTitle("הגדרות תצוגה")
+            .setView(layout)
+            .setPositiveButton("שמור") { _, _ ->
+                val newSlug = slugInput.text.toString().trim()
+                if (newSlug.isNotBlank()) {
+                    prefs.edit().putString("slug", newSlug).apply()
+                    webView.loadUrl(BASE_URL + newSlug)
+                    Toast.makeText(this, "טוען: $newSlug", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNeutralButton("רענן") { _, _ ->
+                webView.reload()
+            }
+            .setNegativeButton("ביטול", null)
+            .show()
     }
 
     private fun enableFullscreen() {
