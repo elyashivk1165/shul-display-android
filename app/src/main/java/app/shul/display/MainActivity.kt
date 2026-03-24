@@ -185,8 +185,10 @@ class MainActivity : AppCompatActivity() {
             .setTitle("⬆️ עדכון זמין")
             .setMessage(msg)
             .setPositiveButton("הורד ועדכן") { _, _ ->
-                UpdateChecker.downloadAndInstall(this, release) { status ->
-                    runOnUiThread { Toast.makeText(this, status, Toast.LENGTH_LONG).show() }
+                CoroutineScope(Dispatchers.IO).launch {
+                    UpdateChecker.downloadAndInstall(this@MainActivity, release) { status ->
+                        runOnUiThread { Toast.makeText(this@MainActivity, status, Toast.LENGTH_LONG).show() }
+                    }
                 }
             }
             .setNegativeButton(if (silent) "אחר כך" else "סגור", null)
