@@ -6,6 +6,8 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
@@ -41,6 +43,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var prefs: SharedPreferences
     private lateinit var reloadOverlay: TextView
     private var lastSuccessfulLoad = System.currentTimeMillis()
+
+    private val longPressHandler = Handler(Looper.getMainLooper())
+    private val openSettingsRunnable = Runnable { openSettings() }
+    private val LONG_PRESS_DURATION_MS = 1500L
 
     companion object {
         private const val TAG = "MainActivity"
@@ -430,20 +436,25 @@ class MainActivity : AppCompatActivity() {
 
     // ── TV remote long press → settings ────────────────────────────────────
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-            event?.startTracking()
-            return true
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val isCenterKey = event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+                          event.keyCode == KeyEvent.KEYCODE_ENTER
+        if (isCenterKey) {
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> {
+                    if (event.repeatCount == 0) {
+                        longPressHandler.postDelayed(openSettingsRunnable, LONG_PRESS_DURATION_MS)
+                    }
+                    // Don't consume — let WebView also process normal clicks
+                    return super.dispatchKeyEvent(event)
+                }
+                KeyEvent.ACTION_UP -> {
+                    longPressHandler.removeCallbacks(openSettingsRunnable)
+                    return super.dispatchKeyEvent(event)
+                }
+            }
         }
-        return super.onKeyDown(keyCode, event)
-    }
-
-    override fun onKeyLongPress(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-            openSettings()
-            return true
-        }
-        return super.onKeyLongPress(keyCode, event)
+        return super.dispatchKeyEvent(event)
     }
 
     private fun openSettings() {
@@ -462,6 +473,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        longPressHandler.removeCallbacks(openSettingsRunnable)
         if (::webView.isInitialized) {
             webView.onPause()
             webView.pauseTimers()
@@ -478,6 +490,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        longPressHandler.removeCallbacks(openSettingsRunnable)
         instanceRef = null
         if (::webView.isInitialized) webView.destroy()
         super.onDestroy()
