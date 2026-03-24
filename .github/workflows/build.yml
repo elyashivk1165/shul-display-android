@@ -1,4 +1,4 @@
-name: Build Debug APK
+name: Build Signed APK
 
 on:
   push:
@@ -10,12 +10,14 @@ permissions:
 
 jobs:
   build:
-    name: Build Debug APK
+    name: Build Signed APK
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v3
@@ -23,19 +25,45 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Generate keystore if not present
+        run: |
+          if [ ! -f keystore.jks ]; then
+            keytool -genkeypair \
+              -alias shuldisplay \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -keystore keystore.jks \
+              -storepass shuldisplay123 \
+              -keypass shuldisplay123 \
+              -dname "CN=Shul Display, OU=App, O=ShulDisplay, L=IL, ST=IL, C=IL" \
+              -noprompt
+            git config user.email "elyashivk1165@gmail.com"
+            git config user.name "Tohar"
+            git add keystore.jks
+            git commit -m "Add signing keystore [skip ci]"
+            git push origin HEAD:main
+            echo "Keystore generated and committed"
+          else
+            echo "Keystore already exists"
+          fi
+
       - name: Make Gradle executable
         run: chmod +x ./gradlew
 
-      - name: Build Debug APK
-        env:
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: ./gradlew assembleDebug -PSUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+      - name: Build Signed APK
+        run: |
+          ./gradlew assembleRelease \
+            -PKEYSTORE_PATH=../keystore.jks \
+            -PKEYSTORE_PASS=shuldisplay123 \
+            -PKEY_ALIAS=shuldisplay \
+            -PKEY_PASS=shuldisplay123
 
       - name: Rename APK
         id: rename
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
-          mv app/build/outputs/apk/debug/app-debug.apk shul-display-$VERSION.apk
+          mv app/build/outputs/apk/release/app-release.apk shul-display-$VERSION.apk
           echo "apk_name=shul-display-$VERSION.apk" >> $GITHUB_OUTPUT
 
       - name: Upload to GitHub Releases

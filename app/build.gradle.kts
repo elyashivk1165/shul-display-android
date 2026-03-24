@@ -11,8 +11,8 @@ android {
         applicationId = "app.shul.display"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.0.8"
+        versionCode = 9
+        versionName = "1.0.9"
 
         // anon key is public-facing (safe in source) — blank/missing property falls back to default
         val supabaseAnonKey = (project.findProperty("SUPABASE_ANON_KEY") as String?)
@@ -25,12 +25,28 @@ android {
         buildConfig = true
     }
 
+    signingConfigs {
+        create("release") {
+            val keystorePath = project.findProperty("KEYSTORE_PATH") as String?
+            val keystorePass = project.findProperty("KEYSTORE_PASS") as String?
+            val keyAlias = project.findProperty("KEY_ALIAS") as String?
+            val keyPass = project.findProperty("KEY_PASS") as String?
+            if (!keystorePath.isNullOrBlank()) {
+                storeFile = file(keystorePath)
+                storePassword = keystorePass
+                this.keyAlias = keyAlias
+                keyPassword = keyPass
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
         }
         release {
-            isMinifyEnabled = true
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
