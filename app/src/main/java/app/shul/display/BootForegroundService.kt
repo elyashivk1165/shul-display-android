@@ -36,10 +36,12 @@ class BootForegroundService : Service() {
         Log.d(TAG, "Launching ${targetClass.simpleName} (slug=${slug.ifBlank { "<empty>" }})")
 
         try {
-            val launchIntent = Intent(this, targetClass).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            }
+            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+                ?: Intent(this, SetupActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
             startActivity(launchIntent)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to launch activity from foreground service", e)

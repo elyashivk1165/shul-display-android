@@ -55,6 +55,10 @@ class SetupActivity : AppCompatActivity() {
 
         saveButton.setOnClickListener {
             val slug = slugInput.text.toString().trim()
+            if (slug.isBlank()) {
+                slugInput.error = "נא להכניס קוד בית הכנסת"
+                return@setOnClickListener
+            }
             if (!isValidSlug(slug)) {
                 slugInput.error = "קוד לא תקין — אותיות, מספרים, מקף בלבד"
                 return@setOnClickListener

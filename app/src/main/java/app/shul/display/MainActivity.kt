@@ -19,6 +19,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.net.Uri
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.widget.EditText
@@ -68,7 +69,8 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.webView)
         reloadOverlay = findViewById(R.id.reloadOverlay)
         setupWebView()
-        webView.loadUrl(BASE_URL + slug)
+        val encodedSlug = Uri.encode(slug)
+        webView.loadUrl("$BASE_URL$encodedSlug")
 
         // Long press → settings menu
         webView.setOnLongClickListener {
@@ -157,7 +159,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadUrl() {
         val slug = prefs.getString("slug", "") ?: ""
-        webView.loadUrl(BASE_URL + slug)
+        val encodedSlug = Uri.encode(slug)
+        webView.loadUrl("$BASE_URL$encodedSlug")
     }
 
     // ── WebView watchdog ─────────────────────────────────────────────────────
@@ -172,7 +175,8 @@ class MainActivity : AppCompatActivity() {
                     withContext(Dispatchers.Main) {
                         if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
                             val slug = prefs.getString("slug", "") ?: ""
-                            webView.loadUrl(BASE_URL + slug)
+                            val encodedSlug = Uri.encode(slug)
+                            webView.loadUrl("$BASE_URL$encodedSlug")
                         }
                     }
                     lastSuccessfulLoad = System.currentTimeMillis()
@@ -213,7 +217,8 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putString("slug", newSlug).apply()
         runOnUiThread {
             if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
-                webView.loadUrl(BASE_URL + newSlug)
+                val encodedSlug = Uri.encode(newSlug)
+                webView.loadUrl("$BASE_URL$encodedSlug")
             }
         }
     }
@@ -276,14 +281,17 @@ class MainActivity : AppCompatActivity() {
             .setView(layout)
             .setPositiveButton("שמור") { _, _ ->
                 val newSlug = input.text.toString().trim()
-                if (newSlug.isNotBlank()) {
-                    prefs.edit().putString("slug", newSlug).apply()
-                    lifecycleScope.launch(Dispatchers.IO) {
-                        SupabaseClient.updateDeviceSlug(DeviceUtils.getDeviceId(applicationContext), newSlug)
-                    }
-                    webView.loadUrl(BASE_URL + newSlug)
-                    Toast.makeText(this, "טוען: $newSlug", Toast.LENGTH_SHORT).show()
+                if (newSlug.isBlank() || !newSlug.matches(Regex("^[a-zA-Z0-9_-]{1,50}$"))) {
+                    Toast.makeText(this, "קוד לא תקין — אותיות, מספרים, מקף בלבד", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
                 }
+                prefs.edit().putString("slug", newSlug).apply()
+                lifecycleScope.launch(Dispatchers.IO) {
+                    SupabaseClient.updateDeviceSlug(DeviceUtils.getDeviceId(applicationContext), newSlug)
+                }
+                val encodedSlug = Uri.encode(newSlug)
+                webView.loadUrl("$BASE_URL$encodedSlug")
+                Toast.makeText(this, "טוען: $newSlug", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("ביטול", null)
             .show()
@@ -447,6 +455,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (::webView.isInitialized) {
             webView.onResume()
             webView.resumeTimers()

@@ -5,8 +5,8 @@ class ExponentialBackoff(
     private val maxDelay: Long = 15 * 60_000L,
     private val multiplier: Double = 2.0
 ) {
-    private var currentDelay = initialDelay
-    var failureCount = 0
+    @Volatile private var currentDelay = initialDelay
+    @Volatile var failureCount = 0
         private set
 
     fun nextDelay(): Long {

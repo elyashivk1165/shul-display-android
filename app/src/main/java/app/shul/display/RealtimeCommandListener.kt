@@ -146,7 +146,10 @@ class RealtimeCommandListener(
                     val record = payload.optJSONObject("record") ?: return
                     val commandId = record.optString("id")
                     val command = record.optString("command")
-                    if (command.isBlank()) return
+                    if (command.isBlank() || commandId.isBlank()) {
+                        Log.w(TAG, "Received invalid command record, skipping")
+                        return
+                    }
 
                     // Parse payload map from the record's payload field
                     val payloadMap = mutableMapOf<String, Any>()
