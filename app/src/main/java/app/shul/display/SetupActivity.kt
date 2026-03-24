@@ -10,6 +10,7 @@ import android.util.Log
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -27,6 +28,7 @@ class SetupActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "SetupActivity"
         private const val REQUEST_ROLE_HOME = 1001
+        private const val REQUEST_HOME_SETTINGS = 1002
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -95,30 +97,67 @@ class SetupActivity : AppCompatActivity() {
     private fun requestDefaultLauncher() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val roleManager = getSystemService(RoleManager::class.java)
-            if (roleManager.isRoleAvailable(RoleManager.ROLE_HOME) &&
-                !roleManager.isRoleHeld(RoleManager.ROLE_HOME)) {
-                val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)
-                @Suppress("DEPRECATION")
-                startActivityForResult(intent, REQUEST_ROLE_HOME)
+            if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) {
+                if (!roleManager.isRoleHeld(RoleManager.ROLE_HOME)) {
+                    try {
+                        val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)
+                        @Suppress("DEPRECATION")
+                        startActivityForResult(intent, REQUEST_ROLE_HOME)
+                        return
+                    } catch (e: Exception) {
+                        Log.w(TAG, "RoleManager failed: ${e.message}")
+                        // Fall through to settings fallback
+                    }
+                } else {
+                    // Already the default launcher — go straight to main
+                    Log.d(TAG, "App already holds ROLE_HOME, launching main")
+                    launchMainActivity()
+                    return
+                }
             } else {
-                // Already set or not available
-                launchMainActivity()
+                Log.w(TAG, "ROLE_HOME not available on this device, falling back to settings")
             }
+            // Fallback for Android Q+: show HOME_SETTINGS with explanation dialog
+            showManualLauncherDialog()
         } else {
-            // Fallback: open home settings
-            try {
-                startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
-            } catch (e: Exception) {
+            // Pre-Q fallback: open home settings with explanation dialog
+            showManualLauncherDialog()
+        }
+    }
+
+    private fun showManualLauncherDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("הגדרת מפעיל ברירת מחדל")
+            .setMessage(
+                "כדי שהאפליקציה תפעל כצג בית הכנסת, יש להגדיר אותה כמפעיל (Launcher) ברירת מחדל.\n\n" +
+                "בחר את \"Shul Display\" כ-Home App בתפריט שייפתח."
+            )
+            .setPositiveButton("פתח הגדרות") { _, _ ->
+                try {
+                    @Suppress("DEPRECATION")
+                    startActivityForResult(Intent(Settings.ACTION_HOME_SETTINGS), REQUEST_HOME_SETTINGS)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Could not open HOME_SETTINGS: ${e.message}")
+                    Toast.makeText(
+                        this,
+                        "לא ניתן לפתוח הגדרות. אנא הגדר את האפליקציה כמפעיל ברירת מחדל ידנית בהגדרות המכשיר.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    launchMainActivity()
+                }
+            }
+            .setNegativeButton("דלג") { _, _ ->
                 launchMainActivity()
             }
-        }
+            .setCancelable(false)
+            .show()
     }
 
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_ROLE_HOME) {
+        if (requestCode == REQUEST_ROLE_HOME || requestCode == REQUEST_HOME_SETTINGS) {
             // Whether accepted or not, proceed to main
             launchMainActivity()
         }

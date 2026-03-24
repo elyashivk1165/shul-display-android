@@ -11,8 +11,8 @@ android {
         applicationId = "app.shul.display"
         minSdk = 26
         targetSdk = 35
-        versionCode = 31
-        versionName = "1.0.31"
+        versionCode = 32
+        versionName = "1.0.32"
 
         // anon key is public-facing (safe in source) — blank/missing property falls back to default
         val supabaseAnonKey = (project.findProperty("SUPABASE_ANON_KEY") as String?)
