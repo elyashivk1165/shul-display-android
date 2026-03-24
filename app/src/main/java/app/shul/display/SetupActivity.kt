@@ -30,7 +30,13 @@ class SetupActivity : AppCompatActivity() {
         prefs = getSharedPreferences("shul_display_prefs", MODE_PRIVATE)
 
         val existingSlug = prefs.getString("slug", null)
-        if (!existingSlug.isNullOrBlank()) {
+
+        // If no slug at all, go straight to setup UI (first launch)
+        // If slug exists but we were launched from MainActivity (editing), also show UI
+        // We detect editing mode by checking if there is a running MainActivity instance
+        val isEditingMode = existingSlug != null && MainActivity.instance != null
+
+        if (!existingSlug.isNullOrBlank() && !isEditingMode) {
             scheduleCommandPoller()
             launchMainActivity()
             return
@@ -38,8 +44,14 @@ class SetupActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_setup)
 
-        val slugInput = findViewById<EditText>(R.id.slugInput)
-        val saveButton = findViewById<Button>(R.id.saveButton)
+        val slugInput = findViewById<EditText>(R.id.etSlug)
+        val saveButton = findViewById<Button>(R.id.btnSave)
+
+        // Pre-fill existing slug when in editing mode
+        if (!existingSlug.isNullOrBlank()) {
+            slugInput.setText(existingSlug)
+            slugInput.selectAll()
+        }
 
         saveButton.setOnClickListener {
             val slug = slugInput.text.toString().trim()
@@ -61,7 +73,14 @@ class SetupActivity : AppCompatActivity() {
             }
 
             scheduleCommandPoller()
-            launchMainActivity()
+
+            if (isEditingMode) {
+                // Update the running MainActivity and go back to it
+                MainActivity.instance?.updateSlug(slug)
+                finish()
+            } else {
+                launchMainActivity()
+            }
         }
     }
 
