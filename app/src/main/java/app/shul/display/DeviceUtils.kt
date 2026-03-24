@@ -114,6 +114,7 @@ object DeviceUtils {
             val memInfo = ActivityManager.MemoryInfo()
             am.getMemoryInfo(memInfo)
             info.put("ram_available_mb", memInfo.availMem / (1024 * 1024))
+            info.put("ram_total_mb", memInfo.totalMem / (1024 * 1024))
         } catch (_: Exception) {}
 
         // Battery
