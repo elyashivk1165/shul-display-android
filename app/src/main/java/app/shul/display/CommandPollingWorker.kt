@@ -26,9 +26,14 @@ class CommandPollingWorker(
             for (cmd in commands) {
                 Log.d(TAG, "Executing command: ${cmd.command}")
 
+                val activity = MainActivity.instance
                 when (cmd.command) {
                     "RELOAD" -> {
-                        MainActivity.instance?.reloadWebView()
+                        if (activity != null && !activity.isDestroyed && !activity.isFinishing) {
+                            activity.reloadWebView()
+                        } else {
+                            Log.w(TAG, "RELOAD skipped — activity not available")
+                        }
                     }
                     "UPDATE_SLUG" -> {
                         val newSlug = cmd.payload["slug"] as? String
@@ -36,7 +41,9 @@ class CommandPollingWorker(
                             applicationContext.getSharedPreferences("shul_display_prefs", Context.MODE_PRIVATE)
                                 .edit().putString("slug", newSlug).apply()
                             SupabaseClient.updateDeviceSlug(deviceId, newSlug)
-                            MainActivity.instance?.updateSlug(newSlug)
+                            if (activity != null && !activity.isDestroyed && !activity.isFinishing) {
+                                activity.updateSlug(newSlug)
+                            }
                         }
                     }
                 }

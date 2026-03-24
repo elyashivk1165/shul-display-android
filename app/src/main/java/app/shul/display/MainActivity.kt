@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.content.SharedPreferences
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -17,7 +18,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import kotlinx.coroutines.CoroutineScope
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -32,6 +33,7 @@ class MainActivity : AppCompatActivity() {
     private var pollingJob: Job? = null
 
     companion object {
+        private const val TAG = "MainActivity"
         const val BASE_URL = "https://shul-display.vercel.app/"
         var instance: MainActivity? = null
     }
@@ -64,7 +66,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Register / refresh device in Supabase (runs every launch to catch missed registrations)
-        CoroutineScope(Dispatchers.IO).launch {
+        lifecycleScope.launch(Dispatchers.IO) {
             val deviceId = DeviceUtils.getDeviceId(applicationContext)
             val appVersion = DeviceUtils.getAppVersion(applicationContext)
             SupabaseClient.registerDevice(deviceId, slug, appVersion)
@@ -142,7 +144,7 @@ class MainActivity : AppCompatActivity() {
                 val newSlug = input.text.toString().trim()
                 if (newSlug.isNotBlank()) {
                     prefs.edit().putString("slug", newSlug).apply()
-                    CoroutineScope(Dispatchers.IO).launch {
+                    lifecycleScope.launch(Dispatchers.IO) {
                         SupabaseClient.updateDeviceSlug(DeviceUtils.getDeviceId(applicationContext), newSlug)
                     }
                     webView.loadUrl(BASE_URL + newSlug)
@@ -157,10 +159,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun checkForUpdateSilent() {
         val currentVersion = DeviceUtils.getAppVersion(this)
-        CoroutineScope(Dispatchers.IO).launch {
+        lifecycleScope.launch(Dispatchers.IO) {
             val release = UpdateChecker.checkForUpdate(currentVersion) ?: return@launch
             withContext(Dispatchers.Main) {
-                showUpdateDialog(release, silent = true)
+                if (!isDestroyed && !isFinishing) {
+                    showUpdateDialog(release, silent = true)
+                }
             }
         }
     }
@@ -168,9 +172,10 @@ class MainActivity : AppCompatActivity() {
     private fun checkForUpdateManual() {
         val currentVersion = DeviceUtils.getAppVersion(this)
         Toast.makeText(this, "בודק עדכונים...", Toast.LENGTH_SHORT).show()
-        CoroutineScope(Dispatchers.IO).launch {
+        lifecycleScope.launch(Dispatchers.IO) {
             val release = UpdateChecker.checkForUpdate(currentVersion)
             withContext(Dispatchers.Main) {
+                if (isDestroyed || isFinishing) return@withContext
                 if (release == null) {
                     Toast.makeText(this@MainActivity, "✓ הגרסה עדכנית (v$currentVersion)", Toast.LENGTH_LONG).show()
                 } else {
@@ -192,9 +197,13 @@ class MainActivity : AppCompatActivity() {
             .setTitle("⬆️ עדכון זמין")
             .setMessage(msg)
             .setPositiveButton("הורד ועדכן") { _, _ ->
-                CoroutineScope(Dispatchers.IO).launch {
+                lifecycleScope.launch(Dispatchers.IO) {
                     UpdateChecker.downloadAndInstall(this@MainActivity, release) { status ->
-                        runOnUiThread { Toast.makeText(this@MainActivity, status, Toast.LENGTH_LONG).show() }
+                        runOnUiThread {
+                            if (!isDestroyed && !isFinishing) {
+                                Toast.makeText(this@MainActivity, status, Toast.LENGTH_LONG).show()
+                            }
+                        }
                     }
                 }
             }
@@ -227,38 +236,62 @@ class MainActivity : AppCompatActivity() {
 
     private fun startCommandPolling() {
         val deviceId = DeviceUtils.getDeviceId(this)
-        pollingJob = CoroutineScope(Dispatchers.IO).launch {
+        pollingJob = lifecycleScope.launch(Dispatchers.IO) {
             while (isActive) {
                 try {
                     val commands = SupabaseClient.getPendingCommands(deviceId)
                     for (cmd in commands) {
-                        when (cmd.command) {
-                            "RELOAD" -> runOnUiThread { webView.reload() }
-                            "UPDATE_SLUG" -> {
-                                val newSlug = cmd.payload["slug"] as? String
-                                if (!newSlug.isNullOrBlank()) {
-                                    prefs.edit().putString("slug", newSlug).apply()
-                                    SupabaseClient.updateDeviceSlug(deviceId, newSlug)
-                                    runOnUiThread { webView.loadUrl(BASE_URL + newSlug) }
+                        try {
+                            when (cmd.command) {
+                                "RELOAD" -> {
+                                    withContext(Dispatchers.Main) {
+                                        if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
+                                            webView.reload()
+                                        }
+                                    }
+                                }
+                                "UPDATE_SLUG" -> {
+                                    val newSlug = cmd.payload["slug"] as? String
+                                    if (!newSlug.isNullOrBlank()) {
+                                        prefs.edit().putString("slug", newSlug).apply()
+                                        SupabaseClient.updateDeviceSlug(deviceId, newSlug)
+                                        withContext(Dispatchers.Main) {
+                                            if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
+                                                webView.loadUrl(BASE_URL + newSlug)
+                                            }
+                                        }
+                                    }
                                 }
                             }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error executing command ${cmd.command}", e)
                         }
                         SupabaseClient.markCommandExecuted(cmd.id)
                     }
                     SupabaseClient.updateLastSeen(deviceId)
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    Log.e(TAG, "Command polling error", e)
+                }
                 delay(30_000)
             }
         }
     }
 
     fun reloadWebView() {
-        runOnUiThread { webView.reload() }
+        runOnUiThread {
+            if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
+                webView.reload()
+            }
+        }
     }
 
     fun updateSlug(newSlug: String) {
         prefs.edit().putString("slug", newSlug).apply()
-        runOnUiThread { webView.loadUrl(BASE_URL + newSlug) }
+        runOnUiThread {
+            if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
+                webView.loadUrl(BASE_URL + newSlug)
+            }
+        }
     }
 
     override fun onDestroy() {
