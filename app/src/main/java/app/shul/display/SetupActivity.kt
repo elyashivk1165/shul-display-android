@@ -1,8 +1,11 @@
 package app.shul.display
 
+import android.app.role.RoleManager
 import android.content.Intent
 import android.content.SharedPreferences
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.widget.Button
 import android.widget.EditText
@@ -19,9 +22,11 @@ import java.util.concurrent.TimeUnit
 class SetupActivity : AppCompatActivity() {
 
     private lateinit var prefs: SharedPreferences
+    private var fromSettings = false
 
     companion object {
         private const val TAG = "SetupActivity"
+        private const val REQUEST_ROLE_HOME = 1001
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -29,14 +34,11 @@ class SetupActivity : AppCompatActivity() {
 
         prefs = getSharedPreferences("shul_display_prefs", MODE_PRIVATE)
 
+        fromSettings = intent.getBooleanExtra("from_settings", false)
         val existingSlug = prefs.getString("slug", null)
 
-        // If slug is already configured AND we're not in editing mode (launched from MainActivity),
-        // skip setup UI and go directly to MainActivity.
-        // isEditingMode: slug exists AND MainActivity is already running (user tapped "שנה סלאג")
-        val isEditingMode = existingSlug != null && MainActivity.instance != null
-
-        if (!existingSlug.isNullOrBlank() && !isEditingMode) {
+        // If slug is already configured and we're not coming from settings, skip to MainActivity
+        if (!existingSlug.isNullOrBlank() && !fromSettings) {
             startActivity(Intent(this, MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             })
@@ -49,7 +51,7 @@ class SetupActivity : AppCompatActivity() {
         val slugInput = findViewById<EditText>(R.id.etSlug)
         val saveButton = findViewById<Button>(R.id.btnSave)
 
-        // Pre-fill existing slug when in editing mode
+        // Pre-fill existing slug when editing
         if (!existingSlug.isNullOrBlank()) {
             slugInput.setText(existingSlug)
             slugInput.selectAll()
@@ -80,13 +82,45 @@ class SetupActivity : AppCompatActivity() {
 
             scheduleCommandPoller()
 
-            if (isEditingMode) {
-                // Update the running MainActivity and go back to it
+            if (fromSettings) {
+                // Update running MainActivity and return to it
                 MainActivity.instance?.updateSlug(slug)
-                finish()
+                launchMainActivity()
             } else {
+                requestDefaultLauncher()
+            }
+        }
+    }
+
+    private fun requestDefaultLauncher() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = getSystemService(RoleManager::class.java)
+            if (roleManager.isRoleAvailable(RoleManager.ROLE_HOME) &&
+                !roleManager.isRoleHeld(RoleManager.ROLE_HOME)) {
+                val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)
+                @Suppress("DEPRECATION")
+                startActivityForResult(intent, REQUEST_ROLE_HOME)
+            } else {
+                // Already set or not available
                 launchMainActivity()
             }
+        } else {
+            // Fallback: open home settings
+            try {
+                startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+            } catch (e: Exception) {
+                launchMainActivity()
+            }
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_ROLE_HOME) {
+            // Whether accepted or not, proceed to main
+            launchMainActivity()
         }
     }
 
