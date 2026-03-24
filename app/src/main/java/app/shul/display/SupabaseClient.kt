@@ -21,7 +21,7 @@ data class DeviceCommand(
 object SupabaseClient {
 
     private const val TAG = "SupabaseClient"
-    private const val SUPABASE_URL = "https://wifpjexmcbkgfnjmmpst.supabase.co"
+    const val SUPABASE_URL = "https://wifpjexmcbkgfnjmmpst.supabase.co"
     private val ANON_KEY: String get() = BuildConfig.SUPABASE_ANON_KEY
 
     private fun headers(): Map<String, String> = mapOf(
@@ -59,11 +59,14 @@ object SupabaseClient {
         }
     }
 
-    suspend fun updateLastSeen(deviceId: String) {
+    suspend fun updateLastSeen(deviceId: String, deviceInfo: JSONObject? = null) {
         withContext(Dispatchers.IO) {
             try {
                 val body = JSONObject().apply {
                     put("last_seen", nowIso())
+                    if (deviceInfo != null) {
+                        put("device_info", deviceInfo)
+                    }
                 }
 
                 val url = URL("$SUPABASE_URL/rest/v1/devices?device_id=eq.$deviceId")

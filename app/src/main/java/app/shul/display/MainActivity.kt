@@ -2,6 +2,7 @@ package app.shul.display
 
 import android.annotation.SuppressLint
 import android.app.AlertDialog
+import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Build
 import android.os.Bundle
@@ -10,12 +11,16 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -25,23 +30,26 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.lang.ref.WeakReference
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var prefs: SharedPreferences
+    private lateinit var reloadOverlay: TextView
     private var pollingJob: Job? = null
 
     companion object {
         private const val TAG = "MainActivity"
         const val BASE_URL = "https://shul-display.vercel.app/"
-        var instance: MainActivity? = null
+        private var instanceRef: WeakReference<MainActivity>? = null
+        val instance: MainActivity? get() = instanceRef?.get()?.takeIf { !it.isDestroyed && !it.isFinishing }
     }
 
     @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        instance = this
+        instanceRef = WeakReference(this)
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(R.layout.activity_main)
@@ -56,6 +64,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView = findViewById(R.id.webView)
+        reloadOverlay = findViewById(R.id.reloadOverlay)
         setupWebView()
         webView.loadUrl(BASE_URL + slug)
 
@@ -90,7 +99,33 @@ class MainActivity : AppCompatActivity() {
             setSupportZoom(false)
         }
         webView.setBackgroundColor(android.graphics.Color.WHITE)
-        webView.webViewClient = WebViewClient()
+        webView.webViewClient = object : WebViewClient() {
+            override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                Log.e(TAG, "WebView renderer crashed, recreating...")
+                if (::webView.isInitialized) {
+                    webView.destroy()
+                }
+                webView = WebView(this@MainActivity)
+                val container = findViewById<android.widget.FrameLayout>(R.id.webViewContainer)
+                container.removeAllViews()
+                container.addView(webView, 0)
+                setupWebView()
+                webView.loadUrl(BASE_URL + (prefs.getString("slug", "") ?: ""))
+                return true
+            }
+
+            override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                if (request?.isForMainFrame == true) {
+                    Log.e(TAG, "WebView load error: ${error?.description}")
+                    lifecycleScope.launch {
+                        delay(30_000)
+                        if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
+                            webView.reload()
+                        }
+                    }
+                }
+            }
+        }
         webView.webChromeClient = WebChromeClient()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -243,11 +278,12 @@ class MainActivity : AppCompatActivity() {
                     for (cmd in commands) {
                         try {
                             when (cmd.command) {
-                                "RELOAD" -> {
-                                    withContext(Dispatchers.Main) {
-                                        if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
-                                            webView.reload()
-                                        }
+                                "RELOAD" -> withContext(Dispatchers.Main) {
+                                    if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
+                                        reloadOverlay.visibility = View.VISIBLE
+                                        delay(800)
+                                        reloadOverlay.visibility = View.GONE
+                                        webView.reload()
                                     }
                                 }
                                 "UPDATE_SLUG" -> {
@@ -262,13 +298,42 @@ class MainActivity : AppCompatActivity() {
                                         }
                                     }
                                 }
+                                "RESTART_APP" -> {
+                                    val intent = applicationContext.packageManager
+                                        .getLaunchIntentForPackage(applicationContext.packageName)
+                                    intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                                    applicationContext.startActivity(intent)
+                                    Runtime.getRuntime().exit(0)
+                                }
+                                "CLEAR_CACHE" -> withContext(Dispatchers.Main) {
+                                    if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
+                                        webView.clearCache(true)
+                                        webView.reload()
+                                    }
+                                }
+                                "PING" -> {
+                                    val info = DeviceUtils.getFullDeviceInfo(applicationContext)
+                                    SupabaseClient.updateLastSeen(deviceId, info)
+                                }
+                                "UPDATE_APP" -> {
+                                    val currentVersion = DeviceUtils.getAppVersion(applicationContext)
+                                    val release = UpdateChecker.checkForUpdate(currentVersion)
+                                    if (release != null) {
+                                        withContext(Dispatchers.Main) {
+                                            if (!isDestroyed && !isFinishing) {
+                                                showUpdateDialog(release, silent = true)
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         } catch (e: Exception) {
                             Log.e(TAG, "Error executing command ${cmd.command}", e)
                         }
                         SupabaseClient.markCommandExecuted(cmd.id)
                     }
-                    SupabaseClient.updateLastSeen(deviceId)
+                    val deviceInfo = DeviceUtils.getFullDeviceInfo(applicationContext)
+                    SupabaseClient.updateLastSeen(deviceId, deviceInfo)
                 } catch (e: Exception) {
                     Log.e(TAG, "Command polling error", e)
                 }
@@ -294,9 +359,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onPause() {
+        super.onPause()
+        if (::webView.isInitialized) {
+            webView.onPause()
+            webView.pauseTimers()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::webView.isInitialized) {
+            webView.onResume()
+            webView.resumeTimers()
+        }
+    }
+
     override fun onDestroy() {
         pollingJob?.cancel()
-        instance = null
+        instanceRef = null
+        if (::webView.isInitialized) webView.destroy()
         super.onDestroy()
     }
 

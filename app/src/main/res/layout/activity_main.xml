@@ -4,8 +4,25 @@
     android:layout_height="match_parent"
     android:background="#FFFFFF">
 
-    <WebView
-        android:id="@+id/webView"
+    <FrameLayout
+        android:id="@+id/webViewContainer"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent">
+
+        <WebView
+            android:id="@+id/webView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/reloadOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#AA000000"
+        android:gravity="center"
+        android:text="מרענן..."
+        android:textColor="#FFFFFF"
+        android:textSize="32sp"
+        android:visibility="gone" />
 </FrameLayout>
