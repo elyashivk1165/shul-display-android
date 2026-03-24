@@ -3,6 +3,7 @@ package app.shul.display
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
+import android.util.Log
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
@@ -19,6 +20,10 @@ class SetupActivity : AppCompatActivity() {
 
     private lateinit var prefs: SharedPreferences
 
+    companion object {
+        private const val TAG = "SetupActivity"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -26,6 +31,7 @@ class SetupActivity : AppCompatActivity() {
 
         val existingSlug = prefs.getString("slug", null)
         if (!existingSlug.isNullOrBlank()) {
+            scheduleCommandPoller()
             launchMainActivity()
             return
         }
@@ -47,7 +53,11 @@ class SetupActivity : AppCompatActivity() {
             val deviceId = DeviceUtils.getDeviceId(this)
             val appVersion = DeviceUtils.getAppVersion(this)
             CoroutineScope(Dispatchers.IO).launch {
-                SupabaseClient.registerDevice(deviceId, slug, appVersion)
+                try {
+                    SupabaseClient.registerDevice(deviceId, slug, appVersion)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to register device", e)
+                }
             }
 
             scheduleCommandPoller()
@@ -56,15 +66,19 @@ class SetupActivity : AppCompatActivity() {
     }
 
     private fun scheduleCommandPoller() {
-        val workRequest = PeriodicWorkRequestBuilder<CommandPollingWorker>(
-            15, TimeUnit.MINUTES
-        ).build()
+        try {
+            val workRequest = PeriodicWorkRequestBuilder<CommandPollingWorker>(
+                15, TimeUnit.MINUTES
+            ).build()
 
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "command_poller",
-            ExistingPeriodicWorkPolicy.KEEP,
-            workRequest
-        )
+            WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                "command_poller",
+                ExistingPeriodicWorkPolicy.KEEP,
+                workRequest
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "WorkManager scheduling failed", e)
+        }
     }
 
     private fun launchMainActivity() {

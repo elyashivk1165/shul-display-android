@@ -13,7 +13,6 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.app.AppCompatDelegate
 
 class MainActivity : AppCompatActivity() {
 
@@ -27,14 +26,15 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
-        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
         super.onCreate(savedInstanceState)
         instance = this
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        enableFullscreen()
 
         setContentView(R.layout.activity_main)
+
+        // Must be called after setContentView so the window decorView is ready
+        enableFullscreen()
 
         prefs = getSharedPreferences("shul_display_prefs", MODE_PRIVATE)
         val slug = prefs.getString("slug", "") ?: ""
