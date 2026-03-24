@@ -161,9 +161,16 @@ class DisplayForegroundService : Service() {
         val activity = MainActivity.instance
         when (cmd.command) {
             "RELOAD" -> {
-                if (activity == null) throw IllegalStateException("אפליקציה לא פעילה")
-                // reloadWebViewWithIndicator uses runOnUiThread internally — safe to call from any thread
-                activity.reloadWebViewWithIndicator()
+                if (activity != null) {
+                    // reloadWebViewWithIndicator uses runOnUiThread internally — safe to call from any thread
+                    activity.reloadWebViewWithIndicator()
+                } else {
+                    // MainActivity not running — launch it (SetupActivity will redirect to MainActivity if slug exists)
+                    val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    }
+                    if (intent != null) startActivity(intent)
+                }
             }
             "UPDATE_SLUG" -> {
                 val newSlug = cmd.payload["slug"] as? String

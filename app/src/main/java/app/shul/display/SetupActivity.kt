@@ -31,14 +31,16 @@ class SetupActivity : AppCompatActivity() {
 
         val existingSlug = prefs.getString("slug", null)
 
-        // If no slug at all, go straight to setup UI (first launch)
-        // If slug exists but we were launched from MainActivity (editing), also show UI
-        // We detect editing mode by checking if there is a running MainActivity instance
+        // If slug is already configured AND we're not in editing mode (launched from MainActivity),
+        // skip setup UI and go directly to MainActivity.
+        // isEditingMode: slug exists AND MainActivity is already running (user tapped "שנה סלאג")
         val isEditingMode = existingSlug != null && MainActivity.instance != null
 
         if (!existingSlug.isNullOrBlank() && !isEditingMode) {
-            scheduleCommandPoller()
-            launchMainActivity()
+            startActivity(Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            })
+            finish()
             return
         }
 
@@ -110,7 +112,7 @@ class SetupActivity : AppCompatActivity() {
 
     private fun launchMainActivity() {
         val intent = Intent(this, MainActivity::class.java)
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         startActivity(intent)
         finish()
     }

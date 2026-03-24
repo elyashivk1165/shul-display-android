@@ -62,6 +62,9 @@ class MainActivity : AppCompatActivity() {
         val slug = prefs.getString("slug", "") ?: ""
 
         if (slug.isBlank()) {
+            startActivity(Intent(this, SetupActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            })
             finish()
             return
         }
@@ -188,17 +191,19 @@ class MainActivity : AppCompatActivity() {
     // ── Public methods for DisplayForegroundService ──────────────────────────
 
     fun reloadWebViewWithIndicator() {
-        if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
-            runOnUiThread {
-                if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
-                    reloadOverlay?.visibility = View.VISIBLE
-                    webView.postDelayed({
-                        if (!isDestroyed && !isFinishing && ::webView.isInitialized) {
-                            reloadOverlay?.visibility = View.GONE
-                            webView.reload()
-                        }
-                    }, 800)
-                }
+        if (isDestroyed || isFinishing) return
+        runOnUiThread {
+            if (isDestroyed || isFinishing) return@runOnUiThread
+            if (::reloadOverlay.isInitialized) reloadOverlay.visibility = View.VISIBLE
+            if (::webView.isInitialized) {
+                webView.postDelayed({
+                    if (!isDestroyed && !isFinishing) {
+                        if (::reloadOverlay.isInitialized) reloadOverlay.visibility = View.GONE
+                        if (::webView.isInitialized) webView.reload()
+                    }
+                }, 800)
+            } else {
+                if (::reloadOverlay.isInitialized) reloadOverlay.visibility = View.GONE
             }
         }
     }
