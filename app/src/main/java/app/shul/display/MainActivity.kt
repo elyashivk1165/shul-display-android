@@ -431,7 +431,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openSettings() {
-        startActivity(Intent(this, SetupActivity::class.java))
+        if (!isDestroyed && !isFinishing) {
+            startActivity(Intent(this, SetupActivity::class.java))
+        }
     }
 
     @Deprecated("Deprecated in Java")

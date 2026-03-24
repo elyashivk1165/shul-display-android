@@ -91,9 +91,13 @@ object ScreenScheduleManager {
     }
 
     private fun scheduleAlarm(context: Context, time: String, action: String) {
-        val parts = time.split(":").map { it.toIntOrNull() ?: 0 }
-        val hour = parts.getOrElse(0) { 0 }
-        val minute = parts.getOrElse(1) { 0 }
+        val parts = time.split(":").map { it.toIntOrNull() ?: -1 }
+        val hour = parts.getOrElse(0) { -1 }
+        val minute = parts.getOrElse(1) { -1 }
+        if (hour !in 0..23 || minute !in 0..59) {
+            Log.e(TAG, "Invalid time: $time")
+            return
+        }
 
         val calendar = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, hour)

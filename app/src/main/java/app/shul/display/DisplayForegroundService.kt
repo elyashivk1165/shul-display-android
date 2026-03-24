@@ -115,6 +115,7 @@ class DisplayForegroundService : Service() {
             while (isActive) {
                 try {
                     val info = DeviceUtils.getFullDeviceInfo(applicationContext)
+                    info.put("realtime_connected", realtimeListener?.isConnected() == true)
                     SupabaseClient.updateLastSeen(deviceId, info)
                     backoff.reset()
                 } catch (e: Exception) {
@@ -160,8 +161,9 @@ class DisplayForegroundService : Service() {
         val activity = MainActivity.instance
         when (cmd.command) {
             "RELOAD" -> {
+                if (activity == null) throw IllegalStateException("אפליקציה לא פעילה")
                 withContext(Dispatchers.Main) {
-                    activity?.reloadWebViewWithIndicator()
+                    activity.reloadWebViewWithIndicator()
                 }
             }
             "UPDATE_SLUG" -> {
@@ -171,8 +173,9 @@ class DisplayForegroundService : Service() {
                     getSharedPreferences("shul_display_prefs", MODE_PRIVATE)
                         .edit().putString("slug", newSlug).apply()
                     SupabaseClient.updateDeviceSlug(deviceId, newSlug)
+                    if (activity == null) throw IllegalStateException("אפליקציה לא פעילה")
                     withContext(Dispatchers.Main) {
-                        activity?.updateSlug(newSlug)
+                        activity.updateSlug(newSlug)
                     }
                 }
             }
@@ -188,8 +191,9 @@ class DisplayForegroundService : Service() {
                 Runtime.getRuntime().exit(0)
             }
             "CLEAR_CACHE" -> {
+                if (activity == null) throw IllegalStateException("אפליקציה לא פעילה")
                 withContext(Dispatchers.Main) {
-                    activity?.clearWebViewCache()
+                    activity.clearWebViewCache()
                 }
             }
             "PING" -> {

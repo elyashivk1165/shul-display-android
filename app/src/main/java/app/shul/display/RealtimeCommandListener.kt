@@ -6,6 +6,7 @@ import okhttp3.*
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 class RealtimeCommandListener(
     private val deviceId: String,
@@ -28,7 +29,7 @@ class RealtimeCommandListener(
     private var reconnectDelayMs = 2_000L
     private val maxReconnectDelay = 60_000L
     private var heartbeatJob: Job? = null
-    private var ref = 1
+    private val ref = AtomicInteger(1)
 
     fun start() {
         scope.launch { connect() }
@@ -38,7 +39,11 @@ class RealtimeCommandListener(
         heartbeatJob?.cancel()
         webSocket?.close(1000, "Service stopped")
         scope.cancel()
+        client.dispatcher.executorService.shutdown()
+        client.connectionPool.evictAll()
     }
+
+    fun isConnected(): Boolean = isConnected.get()
 
     private suspend fun connect() {
         val projectRef = supabaseUrl
@@ -103,7 +108,7 @@ class RealtimeCommandListener(
             put("topic", "realtime:device_commands_$deviceId")
             put("event", "phx_join")
             put("payload", payload)
-            put("ref", ref++.toString())
+            put("ref", ref.getAndIncrement().toString())
         }
         ws.send(msg.toString())
         Log.d(TAG, "Joined Realtime channel for device: $deviceId")
@@ -118,9 +123,14 @@ class RealtimeCommandListener(
                     put("topic", "phoenix")
                     put("event", "heartbeat")
                     put("payload", JSONObject())
-                    put("ref", ref++.toString())
+                    put("ref", ref.getAndIncrement().toString())
                 }
-                ws.send(heartbeat.toString())
+                try {
+                    ws.send(heartbeat.toString())
+                } catch (e: Exception) {
+                    Log.e(TAG, "Heartbeat send failed: ${e.message}")
+                    isConnected.set(false)
+                }
             }
         }
     }
