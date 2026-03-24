@@ -59,6 +59,13 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
+        // Register / refresh device in Supabase (runs every launch to catch missed registrations)
+        CoroutineScope(Dispatchers.IO).launch {
+            val deviceId = DeviceUtils.getDeviceId(applicationContext)
+            val appVersion = DeviceUtils.getAppVersion(applicationContext)
+            SupabaseClient.registerDevice(deviceId, slug, appVersion)
+        }
+
         // Silent update check on startup
         checkForUpdateSilent()
     }
