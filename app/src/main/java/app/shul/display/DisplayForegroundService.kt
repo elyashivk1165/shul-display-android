@@ -34,6 +34,7 @@ class DisplayForegroundService : Service() {
     // Track polling/heartbeat jobs so we never launch duplicates on START_STICKY restarts
     private var pollingJob: Job? = null
     private var heartbeatJob: Job? = null
+    private var realtimeListener: RealtimeCommandListener? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         createNotificationChannel()
@@ -45,6 +46,9 @@ class DisplayForegroundService : Service() {
         }
         if (heartbeatJob?.isActive != true) {
             heartbeatJob = startHeartbeat()
+        }
+        if (realtimeListener == null) {
+            startRealtimeListener()
         }
 
         return START_STICKY
@@ -121,6 +125,35 @@ class DisplayForegroundService : Service() {
                 delay(60_000)
             }
         }
+    }
+
+    private fun startRealtimeListener() {
+        val deviceId = DeviceUtils.getDeviceId(applicationContext)
+        val supabaseUrl = SupabaseClient.SUPABASE_URL
+        val supabaseKey = BuildConfig.SUPABASE_ANON_KEY
+        if (supabaseUrl.isBlank() || supabaseKey.isBlank()) return
+
+        realtimeListener = RealtimeCommandListener(
+            deviceId = deviceId,
+            supabaseUrl = supabaseUrl,
+            supabaseKey = supabaseKey,
+            onCommand = { cmd ->
+                serviceScope.launch(exceptionHandler) {
+                    try {
+                        executeCommand(cmd)
+                        SupabaseClient.reportCommandResult(cmd.id, "success")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Realtime: failed to execute command ${cmd.command}", e)
+                        SupabaseClient.reportCommandResult(
+                            cmd.id, "error",
+                            e.message?.take(500) ?: "Unknown error"
+                        )
+                    }
+                }
+            }
+        )
+        realtimeListener?.start()
+        Log.d(TAG, "Realtime listener started")
     }
 
     private suspend fun executeCommand(cmd: DeviceCommand) {
@@ -214,6 +247,8 @@ class DisplayForegroundService : Service() {
     override fun onDestroy() {
         pollingJob?.cancel()
         heartbeatJob?.cancel()
+        realtimeListener?.stop()
+        realtimeListener = null
         serviceScope.cancel()
         super.onDestroy()
     }
