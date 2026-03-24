@@ -2,7 +2,6 @@ package app.shul.display
 
 import android.annotation.SuppressLint
 import android.app.AlertDialog
-import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Build
 import android.os.Bundle
@@ -18,6 +17,10 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity() {
 
@@ -35,7 +38,6 @@ class MainActivity : AppCompatActivity() {
         instance = this
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
         setContentView(R.layout.activity_main)
         enableFullscreen()
 
@@ -51,11 +53,14 @@ class MainActivity : AppCompatActivity() {
         setupWebView()
         webView.loadUrl(BASE_URL + slug)
 
-        // Long press anywhere on the screen → open settings dialog
+        // Long press → settings menu
         webView.setOnLongClickListener {
             showSettingsDialog()
             true
         }
+
+        // Silent update check on startup
+        checkForUpdateSilent()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -68,7 +73,6 @@ class MainActivity : AppCompatActivity() {
             loadWithOverviewMode = true
             setSupportZoom(false)
         }
-
         webView.setBackgroundColor(android.graphics.Color.WHITE)
         webView.webViewClient = WebViewClient()
         webView.webChromeClient = WebChromeClient()
@@ -81,38 +85,108 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ── Settings dialog ─────────────────────────────────────────────────────
+
     private fun showSettingsDialog() {
-        val currentSlug = prefs.getString("slug", "") ?: ""
-
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(60, 40, 60, 20)
-        }
-
-        val slugInput = EditText(this).apply {
-            hint = "Slug"
-            setText(currentSlug)
-            selectAll()
-        }
-        layout.addView(slugInput)
-
+        val items = arrayOf(
+            "🔄  רענן מסך",
+            "✏️  שנה סלאג",
+            "⬆️  בדוק עדכונים",
+            "🚪  סגור אפליקציה"
+        )
         AlertDialog.Builder(this)
-            .setTitle("הגדרות תצוגה")
-            .setView(layout)
-            .setPositiveButton("שמור") { _, _ ->
-                val newSlug = slugInput.text.toString().trim()
-                if (newSlug.isNotBlank()) {
-                    prefs.edit().putString("slug", newSlug).apply()
-                    webView.loadUrl(BASE_URL + newSlug)
-                    Toast.makeText(this, "טוען: $newSlug", Toast.LENGTH_SHORT).show()
+            .setTitle("הגדרות")
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> webView.reload()
+                    1 -> showChangeSlugDialog()
+                    2 -> checkForUpdateManual()
+                    3 -> finishAndRemoveTask()
                 }
-            }
-            .setNeutralButton("רענן") { _, _ ->
-                webView.reload()
             }
             .setNegativeButton("ביטול", null)
             .show()
     }
+
+    private fun showChangeSlugDialog() {
+        val currentSlug = prefs.getString("slug", "") ?: ""
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(60, 40, 60, 20)
+        }
+        val input = EditText(this).apply {
+            hint = "הזן סלאג"
+            setText(currentSlug)
+            selectAll()
+        }
+        layout.addView(input)
+
+        AlertDialog.Builder(this)
+            .setTitle("שנה סלאג")
+            .setView(layout)
+            .setPositiveButton("שמור") { _, _ ->
+                val newSlug = input.text.toString().trim()
+                if (newSlug.isNotBlank()) {
+                    prefs.edit().putString("slug", newSlug).apply()
+                    CoroutineScope(Dispatchers.IO).launch {
+                        SupabaseClient.updateDeviceSlug(DeviceUtils.getDeviceId(applicationContext), newSlug)
+                    }
+                    webView.loadUrl(BASE_URL + newSlug)
+                    Toast.makeText(this, "טוען: $newSlug", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("ביטול", null)
+            .show()
+    }
+
+    // ── Update checker ──────────────────────────────────────────────────────
+
+    private fun checkForUpdateSilent() {
+        val currentVersion = DeviceUtils.getAppVersion(this)
+        CoroutineScope(Dispatchers.IO).launch {
+            val release = UpdateChecker.checkForUpdate(currentVersion) ?: return@launch
+            withContext(Dispatchers.Main) {
+                showUpdateDialog(release, silent = true)
+            }
+        }
+    }
+
+    private fun checkForUpdateManual() {
+        val currentVersion = DeviceUtils.getAppVersion(this)
+        Toast.makeText(this, "בודק עדכונים...", Toast.LENGTH_SHORT).show()
+        CoroutineScope(Dispatchers.IO).launch {
+            val release = UpdateChecker.checkForUpdate(currentVersion)
+            withContext(Dispatchers.Main) {
+                if (release == null) {
+                    Toast.makeText(this@MainActivity, "✓ הגרסה עדכנית (v$currentVersion)", Toast.LENGTH_LONG).show()
+                } else {
+                    showUpdateDialog(release, silent = false)
+                }
+            }
+        }
+    }
+
+    private fun showUpdateDialog(release: ReleaseInfo, silent: Boolean) {
+        val msg = buildString {
+            append("גרסה חדשה ${release.version} זמינה.")
+            if (release.releaseNotes.isNotBlank()) {
+                append("\n\n")
+                append(release.releaseNotes.take(250))
+            }
+        }
+        AlertDialog.Builder(this)
+            .setTitle("⬆️ עדכון זמין")
+            .setMessage(msg)
+            .setPositiveButton("הורד ועדכן") { _, _ ->
+                UpdateChecker.downloadAndInstall(this, release) { status ->
+                    runOnUiThread { Toast.makeText(this, status, Toast.LENGTH_LONG).show() }
+                }
+            }
+            .setNegativeButton(if (silent) "אחר כך" else "סגור", null)
+            .show()
+    }
+
+    // ── Fullscreen ──────────────────────────────────────────────────────────
 
     private fun enableFullscreen() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
