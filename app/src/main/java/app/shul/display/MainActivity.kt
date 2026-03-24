@@ -113,7 +113,7 @@ class MainActivity : AppCompatActivity() {
                 if (isDestroyed || isFinishing) return true
                 Log.e(TAG, "WebView renderer gone, recreating...")
                 try {
-                    view.webViewClient = null
+                    view.webViewClient = WebViewClient()
                     view.webChromeClient = null
                     val container = findViewById<android.widget.FrameLayout>(R.id.webViewContainer)
                     container?.removeView(view)
