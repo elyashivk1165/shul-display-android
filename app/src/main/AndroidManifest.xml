@@ -76,6 +76,29 @@
                 android:value="persistent_display_management" />
         </service>
 
+        <!-- Device Admin -->
+        <receiver
+            android:name=".ShulDeviceAdminReceiver"
+            android:exported="true"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Screen alarm receiver -->
+        <receiver
+            android:name=".ScreenAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="app.shul.display.SCREEN_OFF" />
+                <action android:name="app.shul.display.SCREEN_ON" />
+            </intent-filter>
+        </receiver>
+
         <receiver
             android:name=".InstallResultReceiver"
             android:exported="false">

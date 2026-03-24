@@ -41,6 +41,9 @@ class BootReceiver : BroadcastReceiver() {
                     Log.e(TAG, "Failed to start DisplayForegroundService", e)
                 }
 
+                // Reschedule screen alarms after boot
+                ScreenScheduleManager.rescheduleAfterBoot(context)
+
                 try {
                     val workRequest = PeriodicWorkRequestBuilder<CommandPollingWorker>(
                         15, TimeUnit.MINUTES

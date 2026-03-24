@@ -18,6 +18,8 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -223,20 +225,35 @@ class MainActivity : AppCompatActivity() {
 
     private fun showSettingsDialog() {
         if (isFinishing || isDestroyed) return
-        val items = arrayOf(
-            "🔄  רענן מסך",
-            "✏️  שנה סלאג",
-            "⬆️  בדוק עדכונים",
-            "🚪  סגור אפליקציה"
-        )
+        val items = buildList {
+            add("🔄  רענן מסך")
+            add("✏️  שנה סלאג")
+            add("⬆️  בדוק עדכונים")
+            val (offTime, onTime) = ScreenScheduleManager.getSchedule(this@MainActivity)
+            if (offTime != null) {
+                add("🌙  לוח זמנים: כיבוי $offTime | הדלקה $onTime")
+            } else {
+                add("🌙  הגדר לוח זמנים למסך")
+            }
+            if (!ScreenScheduleManager.isDeviceAdminActive(this@MainActivity)) {
+                add("🔑  הפעל שליטת מסך (נדרש פעם אחת)")
+            }
+            add("🔲  כבה מסך עכשיו")
+            add("🚪  סגור אפליקציה")
+        }.toTypedArray()
+
         AlertDialog.Builder(this)
             .setTitle("הגדרות")
             .setItems(items) { _, which ->
-                when (which) {
-                    0 -> webView.reload()
-                    1 -> showChangeSlugDialog()
-                    2 -> checkForUpdateManual()
-                    3 -> finishAndRemoveTask()
+                val label = items[which]
+                when {
+                    label.startsWith("🔄") -> webView.reload()
+                    label.startsWith("✏️") -> showChangeSlugDialog()
+                    label.startsWith("⬆️") -> checkForUpdateManual()
+                    label.startsWith("🌙") -> showScheduleDialog()
+                    label.startsWith("🔑") -> requestDeviceAdmin()
+                    label.startsWith("🔲") -> ScreenScheduleManager.lockScreen(this)
+                    label.startsWith("🚪") -> finishAndRemoveTask()
                 }
             }
             .setNegativeButton("ביטול", null)
@@ -273,6 +290,59 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("ביטול", null)
             .show()
+    }
+
+    private fun showScheduleDialog() {
+        if (isFinishing || isDestroyed) return
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(60, 40, 60, 20)
+        }
+
+        val offInput = EditText(this).apply {
+            hint = "שעת כיבוי (לדוגמה: 23:00)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+            val (offTime, _) = ScreenScheduleManager.getSchedule(this@MainActivity)
+            setText(offTime ?: "")
+        }
+        val onInput = EditText(this).apply {
+            hint = "שעת הדלקה (לדוגמה: 07:00)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+            val (_, onTime) = ScreenScheduleManager.getSchedule(this@MainActivity)
+            setText(onTime ?: "")
+        }
+
+        layout.addView(TextView(this).apply { text = "⏰ לוח זמנים למסך" })
+        layout.addView(offInput)
+        layout.addView(onInput)
+
+        AlertDialog.Builder(this)
+            .setTitle("כיבוי/הדלקה אוטומטיים")
+            .setView(layout)
+            .setPositiveButton("שמור") { _, _ ->
+                val off = offInput.text.toString().trim()
+                val on = onInput.text.toString().trim()
+                if (off.isNotBlank() && on.isNotBlank()) {
+                    ScreenScheduleManager.setSchedule(this, off, on)
+                    Toast.makeText(this, "✅ לוח זמנים הוגדר: כיבוי $off | הדלקה $on", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNeutralButton("בטל לוח זמנים") { _, _ ->
+                ScreenScheduleManager.setSchedule(this, null, null)
+                Toast.makeText(this, "לוח הזמנים בוטל", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("ביטול", null)
+            .show()
+    }
+
+    private fun requestDeviceAdmin() {
+        val adminComponent = ComponentName(this, ShulDeviceAdminReceiver::class.java)
+        val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
+            putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent)
+            putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                "נדרש כדי לאפשר כיבוי והדלקה אוטומטיים של המסך לפי לוח זמנים")
+        }
+        startActivity(intent)
     }
 
     // ── Update checker (manual only — auto-update moved to service) ─────────

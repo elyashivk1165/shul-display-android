@@ -159,6 +159,20 @@ class DisplayForegroundService : Service() {
                     }
                 }
             }
+            "SCREEN_OFF" -> {
+                ScreenScheduleManager.lockScreen(applicationContext)
+            }
+            "SCREEN_ON" -> {
+                ScreenScheduleManager.wakeScreen(applicationContext)
+            }
+            "SET_SCHEDULE" -> {
+                val offTime = cmd.payload["off_time"] as? String
+                val onTime = cmd.payload["on_time"] as? String
+                ScreenScheduleManager.setSchedule(applicationContext, offTime, onTime)
+            }
+            "CLEAR_SCHEDULE" -> {
+                ScreenScheduleManager.setSchedule(applicationContext, null, null)
+            }
             else -> Log.w(TAG, "Unknown command: ${cmd.command}")
         }
     }
