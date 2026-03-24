@@ -41,7 +41,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="false"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|locale|fontScale|layoutDirection|uiMode|density"
             android:excludeFromRecents="true"
             android:launchMode="singleTask"
             android:screenOrientation="landscape"
@@ -53,7 +53,7 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>

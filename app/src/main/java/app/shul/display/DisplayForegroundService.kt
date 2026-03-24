@@ -130,9 +130,14 @@ class DisplayForegroundService : Service() {
                 }
             }
             "RESTART_APP" -> {
+                // Sync write before exit
+                getSharedPreferences("shul_display_prefs", MODE_PRIVATE).edit().commit()
                 val intent = packageManager.getLaunchIntentForPackage(packageName)
-                intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                startActivity(intent)
+                if (intent != null) {
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    startActivity(intent)
+                    Thread.sleep(300)
+                }
                 Runtime.getRuntime().exit(0)
             }
             "CLEAR_CACHE" -> {

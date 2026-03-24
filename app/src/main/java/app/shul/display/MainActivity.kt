@@ -96,20 +96,37 @@ class MainActivity : AppCompatActivity() {
             useWideViewPort = true
             loadWithOverviewMode = true
             setSupportZoom(false)
+            allowFileAccess = false
+            allowContentAccess = false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                safeBrowsingEnabled = false  // Not needed for internal app, saves startup time
+            }
         }
         webView.setBackgroundColor(android.graphics.Color.WHITE)
         webView.webViewClient = object : WebViewClient() {
             override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
-                Log.e(TAG, "WebView renderer crashed, recreating...")
-                if (::webView.isInitialized) {
-                    webView.destroy()
+                if (isDestroyed || isFinishing) return true
+                Log.e(TAG, "WebView renderer ${if (detail?.didCrash() == true) "crashed" else "killed"}, recreating...")
+                try {
+                    val container = findViewById<android.widget.FrameLayout>(R.id.webViewContainer)
+                    // Remove ONLY the webview, not the overlay
+                    container?.removeView(view)
+                    if (::webView.isInitialized) {
+                        try { webView.destroy() } catch (_: Exception) {}
+                    }
+                    webView = WebView(this@MainActivity).apply {
+                        layoutParams = android.widget.FrameLayout.LayoutParams(
+                            android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                            android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+                        )
+                    }
+                    container?.addView(webView, 0)  // add at index 0, below overlay
+                    setupWebView()
+                    val slug = prefs.getString("slug", "") ?: ""
+                    webView.loadUrl(BASE_URL + slug)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to recreate WebView", e)
                 }
-                webView = WebView(this@MainActivity)
-                val container = findViewById<android.widget.FrameLayout>(R.id.webViewContainer)
-                container.removeAllViews()
-                container.addView(webView, 0)
-                setupWebView()
-                webView.loadUrl(BASE_URL + (prefs.getString("slug", "") ?: ""))
                 return true
             }
 
@@ -205,6 +222,7 @@ class MainActivity : AppCompatActivity() {
     // ── Settings dialog ─────────────────────────────────────────────────────
 
     private fun showSettingsDialog() {
+        if (isFinishing || isDestroyed) return
         val items = arrayOf(
             "🔄  רענן מסך",
             "✏️  שנה סלאג",
@@ -226,6 +244,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showChangeSlugDialog() {
+        if (isFinishing || isDestroyed) return
         val currentSlug = prefs.getString("slug", "") ?: ""
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -275,6 +294,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showUpdateDialog(release: ReleaseInfo) {
+        if (isFinishing || isDestroyed) return
         val msg = buildString {
             append("גרסה חדשה ${release.version} זמינה.")
             if (release.releaseNotes.isNotBlank()) {
@@ -319,6 +339,11 @@ class MainActivity : AppCompatActivity() {
                     or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
             )
         }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        // Kiosk mode — ignore back button
     }
 
     override fun onPause() {

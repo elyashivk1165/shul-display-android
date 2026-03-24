@@ -54,9 +54,9 @@ class ShulDisplayApp : Application() {
                     .putString("pending_crash_stack", throwable.stackTraceToString().take(4000))
                     .putLong("pending_crash_time", System.currentTimeMillis())
                     .putString("pending_crash_version", DeviceUtils.getAppVersion(this))
-                    .apply()
+                    .commit()
 
-                // 2. Attempt network send
+                // 2. Attempt network send on separate thread with hard 3s deadline
                 val deviceId = DeviceUtils.getDeviceId(this)
                 val body = JSONObject().apply {
                     put("device_id", deviceId)
@@ -66,19 +66,26 @@ class ShulDisplayApp : Application() {
                     put("app_version", DeviceUtils.getAppVersion(this@ShulDisplayApp))
                     put("extra", JSONObject().put("thread", thread.name))
                 }
-                val url = URL("${SupabaseClient.SUPABASE_URL}/rest/v1/device_logs")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    doOutput = true
-                    connectTimeout = 5_000
-                    readTimeout = 5_000
-                    setRequestProperty("Content-Type", "application/json")
-                    setRequestProperty("apikey", BuildConfig.SUPABASE_ANON_KEY)
-                    setRequestProperty("Authorization", "Bearer ${BuildConfig.SUPABASE_ANON_KEY}")
+                val networkThread = Thread {
+                    try {
+                        val url = URL("${SupabaseClient.SUPABASE_URL}/rest/v1/device_logs")
+                        val conn = (url.openConnection() as HttpURLConnection).apply {
+                            requestMethod = "POST"
+                            doOutput = true
+                            connectTimeout = 3_000
+                            readTimeout = 3_000
+                            setRequestProperty("Content-Type", "application/json")
+                            setRequestProperty("apikey", BuildConfig.SUPABASE_ANON_KEY)
+                            setRequestProperty("Authorization", "Bearer ${BuildConfig.SUPABASE_ANON_KEY}")
+                        }
+                        conn.outputStream.bufferedWriter().use { it.write(body.toString()) }
+                        conn.responseCode
+                        conn.disconnect()
+                    } catch (_: Throwable) {}
                 }
-                conn.outputStream.bufferedWriter().use { it.write(body.toString()) }
-                conn.responseCode
-                conn.disconnect()
+                networkThread.isDaemon = true
+                networkThread.start()
+                networkThread.join(3_000)  // hard 3s deadline
             } catch (_: Exception) {
                 Log.e("ShulDisplayApp", "Failed to log crash to Supabase")
             }
