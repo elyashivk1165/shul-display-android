@@ -69,4 +69,6 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
+    implementation(libs.androidx.constraintlayout)
+    implementation(libs.androidx.cardview)
 }
