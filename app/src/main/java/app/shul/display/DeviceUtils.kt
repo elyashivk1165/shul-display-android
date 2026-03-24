@@ -20,6 +20,10 @@ import java.util.UUID
 
 object DeviceUtils {
 
+    private var cachedInfo: JSONObject? = null
+    private var cacheTime: Long = 0
+    private const val CACHE_TTL_MS = 55_000L // 55 seconds
+
     fun getDeviceId(context: Context): String {
         val androidId = Settings.Secure.getString(
             context.contentResolver,
@@ -47,6 +51,10 @@ object DeviceUtils {
     }
 
     fun getFullDeviceInfo(context: Context): JSONObject {
+        val now = System.currentTimeMillis()
+        if (cachedInfo != null && (now - cacheTime) < CACHE_TTL_MS) {
+            return cachedInfo!!
+        }
         val info = JSONObject()
 
         // Basic device info
@@ -139,6 +147,8 @@ object DeviceUtils {
             info.put("device_uptime_seconds", SystemClock.elapsedRealtime() / 1000)
         } catch (_: Exception) {}
 
+        cachedInfo = info
+        cacheTime = now
         return info
     }
 }

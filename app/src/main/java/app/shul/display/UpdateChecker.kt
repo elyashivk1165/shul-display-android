@@ -126,6 +126,7 @@ object UpdateChecker {
             }
 
             if (!apkFile.exists() || apkFile.length() < 1000) {
+                apkFile.delete() // clean up partial download
                 onStatus("ההורדה נכשלה — קובץ ריק")
                 return@withContext
             }

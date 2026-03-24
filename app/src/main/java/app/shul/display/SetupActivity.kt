@@ -55,8 +55,8 @@ class SetupActivity : AppCompatActivity() {
 
         saveButton.setOnClickListener {
             val slug = slugInput.text.toString().trim()
-            if (slug.isEmpty()) {
-                Toast.makeText(this, R.string.slug_required, Toast.LENGTH_SHORT).show()
+            if (!isValidSlug(slug)) {
+                slugInput.error = "קוד לא תקין — אותיות, מספרים, מקף בלבד"
                 return@setOnClickListener
             }
 
@@ -82,6 +82,10 @@ class SetupActivity : AppCompatActivity() {
                 launchMainActivity()
             }
         }
+    }
+
+    private fun isValidSlug(slug: String): Boolean {
+        return slug.isNotBlank() && slug.matches(Regex("^[a-zA-Z0-9_-]{1,50}$"))
     }
 
     private fun scheduleCommandPoller() {

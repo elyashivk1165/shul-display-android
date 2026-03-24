@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
@@ -103,18 +104,31 @@ object SupabaseClient {
                 }
 
                 val code = conn.responseCode
-                if (code == HttpURLConnection.HTTP_OK) {
-                    val response = conn.inputStream.bufferedReader().use(BufferedReader::readText)
-                    conn.disconnect()
-                    parseCommands(response)
-                } else {
-                    Log.w(TAG, "getPendingCommands returned $code")
-                    conn.disconnect()
-                    emptyList()
+                when (code) {
+                    HttpURLConnection.HTTP_OK -> {
+                        val response = conn.inputStream.bufferedReader().use(BufferedReader::readText)
+                        conn.disconnect()
+                        parseCommands(response)
+                    }
+                    429 -> {
+                        Log.w(TAG, "Rate limited by Supabase (429)")
+                        conn.disconnect()
+                        throw IOException("Rate limited (429)")
+                    }
+                    HttpURLConnection.HTTP_UNAUTHORIZED -> {
+                        Log.e(TAG, "Unauthorized (401) - check API key")
+                        conn.disconnect()
+                        throw IOException("Unauthorized (401)")
+                    }
+                    else -> {
+                        Log.w(TAG, "Unexpected response: $code")
+                        conn.disconnect()
+                        throw IOException("HTTP $code")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "getPendingCommands failed", e)
-                emptyList()
+                throw e
             }
         }
     }

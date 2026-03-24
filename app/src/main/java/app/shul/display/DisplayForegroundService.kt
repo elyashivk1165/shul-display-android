@@ -237,7 +237,7 @@ class DisplayForegroundService : Service() {
         val restartIntent = Intent(applicationContext, DisplayForegroundService::class.java)
         val pendingIntent = PendingIntent.getService(
             applicationContext, 1, restartIntent,
-            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
         alarmManager.set(

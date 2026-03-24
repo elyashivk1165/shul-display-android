@@ -15,18 +15,11 @@ class CommandPollingWorker(
     }
 
     override suspend fun doWork(): Result {
-        // Safety net: ensure DisplayForegroundService is running
-        if (!isServiceRunning(applicationContext, DisplayForegroundService::class.java)) {
-            Log.w(TAG, "DisplayForegroundService not running, restarting...")
-            DisplayForegroundService.start(applicationContext)
-        }
+        // Safety net: ensure DisplayForegroundService is running.
+        // getRunningServices() is deprecated and always returns empty on Android 11+,
+        // so we always call start() directly — START_STICKY handles duplicate starts gracefully.
+        Log.d(TAG, "Ensuring DisplayForegroundService is running...")
+        DisplayForegroundService.start(applicationContext)
         return Result.success()
-    }
-
-    private fun isServiceRunning(context: Context, serviceClass: Class<*>): Boolean {
-        val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-        @Suppress("DEPRECATION")
-        return manager.getRunningServices(Integer.MAX_VALUE)
-            .any { it.service.className == serviceClass.name }
     }
 }
