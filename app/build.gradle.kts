@@ -11,10 +11,13 @@ android {
         applicationId = "app.shul.display"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 4
+        versionName = "1.0.3"
 
-        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${project.findProperty("SUPABASE_ANON_KEY") ?: ""}\"")
+        // anon key is public-facing (safe in source) — can be overridden via -PSUPABASE_ANON_KEY
+        val supabaseAnonKey = project.findProperty("SUPABASE_ANON_KEY") as String?
+            ?: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndpZnBqZXhtY2JrZ2Zuam1tcHN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1MjI5NTQsImV4cCI6MjA4NzA5ODk1NH0.4oncY2zsUl9PntsZ2aWUetWfYdhxUicwd5MFqbBfhoQ"
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
     }
 
     buildFeatures {
