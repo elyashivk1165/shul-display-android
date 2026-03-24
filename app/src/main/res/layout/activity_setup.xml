@@ -29,7 +29,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toTopOf="@+id/tvWelcome"
-        app:layout_constraintVerticalChainStyle="packed"
         android:layout_marginBottom="16dp" />
 
     <!-- Welcome title -->
