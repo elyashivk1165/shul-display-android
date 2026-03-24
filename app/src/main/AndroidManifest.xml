@@ -61,6 +61,14 @@
                 android:value="auto_start_on_boot" />
         </service>
 
+        <receiver
+            android:name=".InstallResultReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="app.shul.display.INSTALL_COMPLETE" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

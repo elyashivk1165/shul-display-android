@@ -1,7 +1,10 @@
 package app.shul.display
 
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInstaller
+import android.os.Build
 import android.util.Log
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
@@ -128,10 +131,62 @@ object UpdateChecker {
             }
 
             onStatus("ההורדה הושלמה — מתקין...")
-            installApk(context, apkFile)
+            installApkSilently(context, apkFile, onStatus)
         } catch (e: Exception) {
             Log.e(TAG, "downloadAndInstall failed", e)
             onStatus("שגיאה: ${e.message}")
+        }
+    }
+
+    /**
+     * Silent install using PackageInstaller.Session (Android 12+).
+     * Falls back to ACTION_VIEW dialog on older Android.
+     */
+    suspend fun installApkSilently(
+        context: Context,
+        apkFile: File,
+        onStatus: (String) -> Unit
+    ) = withContext(Dispatchers.IO) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                val packageInstaller = context.packageManager.packageInstaller
+                val params = PackageInstaller.SessionParams(
+                    PackageInstaller.SessionParams.MODE_FULL_INSTALL
+                ).apply {
+                    setAppPackageName(context.packageName)
+                    setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+                }
+
+                val sessionId = packageInstaller.createSession(params)
+                val session = packageInstaller.openSession(sessionId)
+
+                session.openWrite("package", 0, apkFile.length()).use { outputStream ->
+                    apkFile.inputStream().use { it.copyTo(outputStream) }
+                    session.fsync(outputStream)
+                }
+
+                val intent = Intent(context, InstallResultReceiver::class.java).apply {
+                    action = "app.shul.display.INSTALL_COMPLETE"
+                }
+                val pendingIntent = PendingIntent.getBroadcast(
+                    context, sessionId, intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+                )
+
+                session.commit(pendingIntent.intentSender)
+                session.close()
+
+                onStatus("מתקין עדכון...")
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent install failed, falling back to dialog", e)
+                withContext(Dispatchers.Main) {
+                    installApk(context, apkFile)
+                }
+            }
+        } else {
+            withContext(Dispatchers.Main) {
+                installApk(context, apkFile)
+            }
         }
     }
 

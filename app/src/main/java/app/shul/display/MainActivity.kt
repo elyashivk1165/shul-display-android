@@ -86,6 +86,9 @@ class MainActivity : AppCompatActivity() {
 
         // Start foreground command polling (every 30 seconds while app is open)
         startCommandPolling()
+
+        // Background auto-update checker
+        startAutoUpdateChecker()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -220,6 +223,30 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun startAutoUpdateChecker() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            delay(60_000) // Wait 60s after launch before first check
+            while (isActive) {
+                try {
+                    val currentVersion = DeviceUtils.getAppVersion(applicationContext)
+                    val release = UpdateChecker.checkForUpdate(currentVersion)
+                    if (release != null) {
+                        Log.i(TAG, "Auto-update available: ${release.version}, downloading...")
+                        UpdateChecker.downloadAndInstall(applicationContext, release) { status ->
+                            Log.i(TAG, "Auto-update status: $status")
+                        }
+                        delay(10 * 60_000) // 10 minutes after triggering install
+                    } else {
+                        delay(4 * 60 * 60_000) // Check every 4 hours if up to date
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Auto-update check failed", e)
+                    delay(30 * 60_000) // Retry in 30 min on error
+                }
+            }
+        }
+    }
+
     private fun showUpdateDialog(release: ReleaseInfo, silent: Boolean) {
         val msg = buildString {
             append("גרסה חדשה ${release.version} זמינה.")
@@ -319,10 +346,9 @@ class MainActivity : AppCompatActivity() {
                                     val currentVersion = DeviceUtils.getAppVersion(applicationContext)
                                     val release = UpdateChecker.checkForUpdate(currentVersion)
                                     if (release != null) {
-                                        withContext(Dispatchers.Main) {
-                                            if (!isDestroyed && !isFinishing) {
-                                                showUpdateDialog(release, silent = true)
-                                            }
+                                        Log.i(TAG, "UPDATE_APP command: installing ${release.version}")
+                                        UpdateChecker.downloadAndInstall(applicationContext, release) { status ->
+                                            Log.i(TAG, "UPDATE_APP status: $status")
                                         }
                                     }
                                 }
