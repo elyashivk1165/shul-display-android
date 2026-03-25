@@ -26,13 +26,25 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x ./gradlew
 
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG=${GITHUB_REF#refs/tags/v}   # e.g. "1.0.43"
+          # versionCode = major*10000 + minor*100 + patch  →  1*10000 + 0*100 + 43 = 10043
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$TAG"
+          CODE=$(( MAJOR * 10000 + MINOR * 100 + PATCH ))
+          echo "version_name=$TAG" >> $GITHUB_OUTPUT
+          echo "version_code=$CODE" >> $GITHUB_OUTPUT
+
       - name: Build Signed APK
         run: |
           ./gradlew assembleRelease \
             -PKEYSTORE_PATH=../keystore.jks \
             -PKEYSTORE_PASS=shuldisplay123 \
             -PKEY_ALIAS=shuldisplay \
-            -PKEY_PASS=shuldisplay123
+            -PKEY_PASS=shuldisplay123 \
+            -PVERSION_NAME=${{ steps.version.outputs.version_name }} \
+            -PVERSION_CODE=${{ steps.version.outputs.version_code }}
 
       - name: Rename APK
         id: rename
