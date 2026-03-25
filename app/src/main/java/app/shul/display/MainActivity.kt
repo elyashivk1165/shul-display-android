@@ -87,6 +87,10 @@ class MainActivity : AppCompatActivity() {
             applyWakeScreenFlags()
         }
         setContentView(R.layout.activity_main)
+        // Prevent system from adding bottom inset padding (removes white gap on newer Android)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.setDecorFitsSystemWindows(false)
+        }
         setupKioskMode()
         enableFullscreen()
 
