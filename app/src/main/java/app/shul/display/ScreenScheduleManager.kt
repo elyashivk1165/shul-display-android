@@ -7,6 +7,9 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.PowerManager
 import android.util.Log
 import java.util.Calendar
 
@@ -124,24 +127,31 @@ object ScreenScheduleManager {
 
     fun wakeScreen(context: Context) {
         try {
-            val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            // Method 1: PowerManager wake lock with ACQUIRE_CAUSES_WAKEUP
+            val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
             @Suppress("DEPRECATION")
             val wakeLock = pm.newWakeLock(
-                android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
-                android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
-                android.os.PowerManager.ON_AFTER_RELEASE,
-                "shul-display:wake-screen"
+                PowerManager.FULL_WAKE_LOCK or
+                PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                PowerManager.ON_AFTER_RELEASE,
+                "ShulDisplay:WakeScreen"
             )
-            wakeLock.acquire(3_000)
-            wakeLock.release()
-            Log.i(TAG, "Screen woken up")
+            wakeLock.acquire(10_000L)
 
-            val intent = Intent(context, MainActivity::class.java).apply {
+            // Method 2: Also bring MainActivity to foreground with screen-on flags
+            val activityIntent = Intent(context, MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             }
-            context.startActivity(intent)
+            context.startActivity(activityIntent)
+
+            // Release wake lock after short delay
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (wakeLock.isHeld) wakeLock.release()
+            }, 5_000L)
+
+            Log.i(TAG, "Screen woken up")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to wake screen", e)
+            Log.e(TAG, "Failed to wake screen: ${e.message}")
         }
     }
 

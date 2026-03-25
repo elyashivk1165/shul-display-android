@@ -2,12 +2,15 @@ package app.shul.display
 
 import android.annotation.SuppressLint
 import android.app.AlertDialog
+import android.app.KeyguardManager
+import android.app.role.RoleManager
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
@@ -53,6 +56,7 @@ class MainActivity : AppCompatActivity() {
         const val BASE_URL = "https://shul-display.vercel.app/"
         private var instanceRef: WeakReference<MainActivity>? = null
         val instance: MainActivity? get() = instanceRef?.get()?.takeIf { !it.isDestroyed && !it.isFinishing }
+        private const val REQUEST_ROLE_HOME = 1001
     }
 
     @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
@@ -60,6 +64,19 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         instanceRef = WeakReference(this)
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setTurnScreenOn(true)
+            setShowWhenLocked(true)
+            val keyguardManager = getSystemService(KeyguardManager::class.java)
+            keyguardManager?.requestDismissKeyguard(this, null)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+            )
+        }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(R.layout.activity_main)
         enableFullscreen()
@@ -258,6 +275,7 @@ class MainActivity : AppCompatActivity() {
             if (!ScreenScheduleManager.isDeviceAdminActive(this@MainActivity)) {
                 add("🔑  הפעל שליטת מסך (נדרש פעם אחת)")
             }
+            add("🏠  הגדר כ-Launcher")
             add("🔲  כבה מסך עכשיו")
             add("🚪  סגור אפליקציה")
         }.toTypedArray()
@@ -272,6 +290,7 @@ class MainActivity : AppCompatActivity() {
                     label.startsWith("⬆️") -> checkForUpdateManual()
                     label.startsWith("🌙") -> showScheduleDialog()
                     label.startsWith("🔑") -> requestDeviceAdmin()
+                    label.startsWith("🏠") -> requestLauncherRole()
                     label.startsWith("🔲") -> ScreenScheduleManager.lockScreen(this)
                     label.startsWith("🚪") -> finishAndRemoveTask()
                 }
@@ -366,6 +385,33 @@ class MainActivity : AppCompatActivity() {
                 "נדרש כדי לאפשר כיבוי והדלקה אוטומטיים של המסך לפי לוח זמנים")
         }
         startActivity(intent)
+    }
+
+    private fun requestLauncherRole() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = getSystemService(RoleManager::class.java)
+            if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) {
+                if (roleManager.isRoleHeld(RoleManager.ROLE_HOME)) {
+                    Toast.makeText(this, "האפליקציה כבר מוגדרת כ-Launcher ✅", Toast.LENGTH_SHORT).show()
+                    return
+                }
+                try {
+                    startActivityForResult(
+                        roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME),
+                        REQUEST_ROLE_HOME
+                    )
+                    return
+                } catch (e: Exception) {
+                    Log.w(TAG, "RoleManager failed: ${e.message}")
+                }
+            }
+        }
+        // Fallback
+        try {
+            startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+        } catch (e: Exception) {
+            Toast.makeText(this, "פתח הגדרות → אפליקציות ברירת מחדל → Launcher", Toast.LENGTH_LONG).show()
+        }
     }
 
     // ── Update checker (manual only — auto-update moved to service) ─────────
@@ -479,6 +525,17 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setTurnScreenOn(true)
+            setShowWhenLocked(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+            )
+        }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (::webView.isInitialized) {
             webView.onResume()

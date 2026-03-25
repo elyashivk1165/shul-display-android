@@ -30,19 +30,21 @@ class BootForegroundService : Service() {
         startForeground(NOTIFICATION_ID, notification)
 
         val prefs = getSharedPreferences("shul_display_prefs", Context.MODE_PRIVATE)
-        val slug = prefs.getString("slug", "") ?: ""
+        val slug = prefs.getString("slug", null)
 
-        val targetClass = if (slug.isNotBlank()) MainActivity::class.java else SetupActivity::class.java
-        Log.d(TAG, "Launching ${targetClass.simpleName} (slug=${slug.ifBlank { "<empty>" }})")
+        Log.d(TAG, "Boot: slug=${if (!slug.isNullOrBlank()) slug else "<empty>"}")
 
         try {
-            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-                ?: Intent(this, SetupActivity::class.java).apply {
+            val intent = if (!slug.isNullOrBlank()) {
+                Intent(this, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                }
+            } else {
+                Intent(this, SetupActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            launchIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            startActivity(launchIntent)
+            }
+            startActivity(intent)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to launch activity from foreground service", e)
         }
