@@ -5,4 +5,6 @@
     <string name="slug_hint">Enter display slug</string>
     <string name="save_and_start">Save &amp; Start</string>
     <string name="slug_required">Please enter a slug</string>
+    <string name="accessibility_service_label">Shul Display — הפעלה אוטומטית</string>
+    <string name="accessibility_service_description">מאפשר ל-Shul Display להתחיל אוטומטית לאחר הפעלת המכשיר. נדרש לתפקוד תקין של מסך בית הכנסת.</string>
 </resources>

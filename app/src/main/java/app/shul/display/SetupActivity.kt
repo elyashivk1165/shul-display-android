@@ -35,6 +35,7 @@ class SetupActivity : AppCompatActivity() {
         private const val REQUEST_ROLE_HOME = 1001
         private const val REQUEST_HOME_SETTINGS = 1002
         private const val REQUEST_OVERLAY_PERMISSION = 1003
+        private const val REQUEST_ACCESSIBILITY_SETTINGS = 1004
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -111,12 +112,48 @@ class SetupActivity : AppCompatActivity() {
                     )
                 }
                 .setNegativeButton("דלג") { _, _ ->
-                    requestDefaultLauncher()
+                    requestAccessibilityService()
                 }
                 .show()
         } else {
-            requestDefaultLauncher()
+            requestAccessibilityService()
         }
+    }
+
+    private fun requestAccessibilityService() {
+        if (fromSettings) {
+            requestDefaultLauncher()
+            return
+        }
+
+        // Already enabled — skip dialog
+        if (ShulAccessibilityService.isEnabled(this)) {
+            Log.d(TAG, "Accessibility service already enabled")
+            requestDefaultLauncher()
+            return
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("הפעלה אוטומטית")
+            .setMessage(
+                "כדי שהאפליקציה תפעל אוטומטית לאחר הדלקת המכשיר, יש להפעיל את שירות הנגישות.\n\n" +
+                "בדף שייפתח:\n" +
+                "1. מצא את \"Shul Display\"\n" +
+                "2. לחץ עליו ואפשר את השירות\n" +
+                "3. חזור לאפליקציה"
+            )
+            .setPositiveButton("פתח הגדרות נגישות") { _, _ ->
+                @Suppress("DEPRECATION")
+                startActivityForResult(
+                    Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
+                    REQUEST_ACCESSIBILITY_SETTINGS
+                )
+            }
+            .setNegativeButton("דלג") { _, _ ->
+                requestDefaultLauncher()
+            }
+            .setCancelable(false)
+            .show()
     }
 
     private fun requestDefaultLauncher() {
@@ -219,7 +256,11 @@ class SetupActivity : AppCompatActivity() {
         super.onActivityResult(requestCode, resultCode, data)
         when (requestCode) {
             REQUEST_OVERLAY_PERMISSION -> {
-                // Whether granted or not, proceed to request launcher role
+                // Whether granted or not, proceed to accessibility service step
+                requestAccessibilityService()
+            }
+            REQUEST_ACCESSIBILITY_SETTINGS -> {
+                // Whether enabled or not, proceed to launcher step
                 requestDefaultLauncher()
             }
             REQUEST_ROLE_HOME, REQUEST_HOME_SETTINGS -> {
