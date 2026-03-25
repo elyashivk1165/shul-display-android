@@ -78,6 +78,11 @@ class MainActivity : AppCompatActivity() {
             )
         }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        // Handle wake_screen extra from alarm or admin command
+        if (intent?.getBooleanExtra("wake_screen", false) == true) {
+            applyWakeScreenFlags()
+        }
         setContentView(R.layout.activity_main)
         enableFullscreen()
 
@@ -116,6 +121,30 @@ class MainActivity : AppCompatActivity() {
 
         // Start WebView watchdog
         startWebViewWatchdog()
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        if (intent?.getBooleanExtra("wake_screen", false) == true) {
+            applyWakeScreenFlags()
+        }
+    }
+
+    private fun applyWakeScreenFlags() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setTurnScreenOn(true)
+            setShowWhenLocked(true)
+            getSystemService(KeyguardManager::class.java)?.requestDismissKeyguard(this, null)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+            )
+        }
+        // Release alarm wake lock now that activity is running
+        ScreenAlarmReceiver.releaseWakeLock()
     }
 
     @SuppressLint("SetJavaScriptEnabled")

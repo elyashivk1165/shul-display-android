@@ -220,7 +220,17 @@ class DisplayForegroundService : Service() {
                 ScreenScheduleManager.lockScreen(applicationContext)
             }
             "SCREEN_ON" -> {
-                ScreenScheduleManager.wakeScreen(applicationContext)
+                // Acquire wake lock first to keep CPU awake while starting activity
+                ScreenAlarmReceiver.acquireWakeLock(applicationContext)
+
+                // Start MainActivity with wake flags
+                val wakeIntent = Intent(this, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                    putExtra("wake_screen", true)
+                }
+                withContext(Dispatchers.Main) {
+                    startActivity(wakeIntent)
+                }
             }
             "SET_SCHEDULE" -> {
                 val offTime = cmd.payload["off_time"] as? String
