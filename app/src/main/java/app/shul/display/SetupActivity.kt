@@ -63,19 +63,17 @@ class SetupActivity : AppCompatActivity() {
             slugInput.selectAll()
         }
 
-        // Permissions section — shown only in settings mode (not first-time setup)
+        // Permissions section — shown only in settings mode
         val permissionsSection = findViewById<View>(R.id.permissionsSection)
-        val exactAlarmButton = findViewById<Button>(R.id.exactAlarmButton)
-        val exactAlarmStatus = findViewById<TextView>(R.id.exactAlarmStatus)
-        val turnScreenOnButton = findViewById<Button>(R.id.turnScreenOnButton)
-        val turnScreenOnStatus = findViewById<TextView>(R.id.turnScreenOnStatus)
-
         if (fromSettings) {
             permissionsSection.visibility = View.VISIBLE
-            refreshPermissionStatus(exactAlarmButton, exactAlarmStatus, turnScreenOnButton, turnScreenOnStatus)
-
-            exactAlarmButton.setOnClickListener { requestExactAlarmPermission() }
-            turnScreenOnButton.setOnClickListener { requestTurnScreenOnPermission() }
+            refreshAllPermissionStatus()
+            findViewById<Button>(R.id.overlayButton).setOnClickListener { requestOverlayPermission() }
+            findViewById<Button>(R.id.exactAlarmButton).setOnClickListener { requestExactAlarmPermission() }
+            findViewById<Button>(R.id.turnScreenOnButton).setOnClickListener { requestTurnScreenOnPermission() }
+            findViewById<Button>(R.id.accessibilityButton).setOnClickListener {
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }
         }
 
         saveButton.setOnClickListener {
@@ -133,34 +131,48 @@ class SetupActivity : AppCompatActivity() {
         return true
     }
 
-    private fun refreshPermissionStatus(
-        exactAlarmButton: Button,
-        exactAlarmStatus: TextView,
-        turnScreenOnButton: Button,
-        turnScreenOnStatus: TextView
-    ) {
-        if (canScheduleExactAlarms()) {
-            exactAlarmStatus.text = "✓ הרשאה ניתנה"
-            exactAlarmStatus.setTextColor(0xFF22C55E.toInt())
-            exactAlarmButton.isEnabled = false
-            exactAlarmButton.alpha = 0.4f
-        } else {
-            exactAlarmStatus.text = "נדרשת לשעון שבת / הדלקת מסך בזמן קבוע"
-            exactAlarmStatus.setTextColor(0xFF64748B.toInt())
-            exactAlarmButton.isEnabled = true
-            exactAlarmButton.alpha = 1f
-        }
+    private fun refreshAllPermissionStatus() {
+        setPermissionRow(
+            button = findViewById(R.id.overlayButton),
+            status = findViewById(R.id.overlayStatus),
+            granted = Settings.canDrawOverlays(this),
+            descGranted = "✓ הרשאה ניתנה",
+            descNeeded = "נדרשת להצגת ממשק מעל הכל"
+        )
+        setPermissionRow(
+            button = findViewById(R.id.exactAlarmButton),
+            status = findViewById(R.id.exactAlarmStatus),
+            granted = canScheduleExactAlarms(),
+            descGranted = "✓ הרשאה ניתנה",
+            descNeeded = "נדרשת לשעון שבת / הדלקת מסך בזמן קבוע"
+        )
+        setPermissionRow(
+            button = findViewById(R.id.turnScreenOnButton),
+            status = findViewById(R.id.turnScreenOnStatus),
+            granted = hasTurnScreenOnPermission(),
+            descGranted = "✓ הרשאה ניתנה",
+            descNeeded = "נדרשת כדי שהמסך יידלק אוטומטית"
+        )
+        setPermissionRow(
+            button = findViewById(R.id.accessibilityButton),
+            status = findViewById(R.id.accessibilityStatus),
+            granted = ShulAccessibilityService.isEnabled(this),
+            descGranted = "✓ שירות פעיל",
+            descNeeded = "נדרש להפעלה אוטומטית לאחר הדלקת המכשיר"
+        )
+    }
 
-        if (hasTurnScreenOnPermission()) {
-            turnScreenOnStatus.text = "✓ הרשאה ניתנה"
-            turnScreenOnStatus.setTextColor(0xFF22C55E.toInt())
-            turnScreenOnButton.isEnabled = false
-            turnScreenOnButton.alpha = 0.4f
+    private fun setPermissionRow(button: Button, status: TextView, granted: Boolean, descGranted: String, descNeeded: String) {
+        if (granted) {
+            status.text = descGranted
+            status.setTextColor(0xFF22C55E.toInt())
+            button.isEnabled = false
+            button.alpha = 0.4f
         } else {
-            turnScreenOnStatus.text = "נדרשת כדי שהמסך יידלק אוטומטית"
-            turnScreenOnStatus.setTextColor(0xFF64748B.toInt())
-            turnScreenOnButton.isEnabled = true
-            turnScreenOnButton.alpha = 1f
+            status.text = descNeeded
+            status.setTextColor(0xFF64748B.toInt())
+            button.isEnabled = true
+            button.alpha = 1f
         }
     }
 
@@ -216,7 +228,6 @@ class SetupActivity : AppCompatActivity() {
     }
 
     private fun requestExactAlarmInFlow() {
-        // Called during initial setup flow (not from settings button)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
             if (!am.canScheduleExactAlarms()) {
@@ -231,14 +242,34 @@ class SetupActivity : AppCompatActivity() {
                                     Uri.parse("package:$packageName")),
                                 REQUEST_EXACT_ALARM
                             )
-                        } catch (e: Exception) {
-                            requestAccessibilityService()
-                        }
+                        } catch (e: Exception) { requestTurnScreenOnInFlow() }
                     }
-                    .setNegativeButton("דלג") { _, _ -> requestAccessibilityService() }
+                    .setNegativeButton("דלג") { _, _ -> requestTurnScreenOnInFlow() }
                     .show()
                 return
             }
+        }
+        requestTurnScreenOnInFlow()
+    }
+
+    private fun requestTurnScreenOnInFlow() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasTurnScreenOnPermission()) {
+            AlertDialog.Builder(this)
+                .setTitle("הפעלת המסך")
+                .setMessage("כדי שהמסך יידלק אוטומטית בשעה שהגדרת, יש לאפשר הרשאת \"הפעלת המסך\".\n\nבדף שייפתח: מצא את האפליקציה ואפשר.")
+                .setPositiveButton("אישור") { _, _ ->
+                    try {
+                        @Suppress("DEPRECATION")
+                        startActivityForResult(
+                            Intent("android.settings.TURN_SCREEN_ON_SETTINGS",
+                                Uri.parse("package:$packageName")),
+                            REQUEST_TURN_SCREEN_ON
+                        )
+                    } catch (e: Exception) { requestAccessibilityService() }
+                }
+                .setNegativeButton("דלג") { _, _ -> requestAccessibilityService() }
+                .show()
+            return
         }
         requestAccessibilityService()
     }
@@ -403,26 +434,18 @@ class SetupActivity : AppCompatActivity() {
         super.onActivityResult(requestCode, resultCode, data)
         when (requestCode) {
             REQUEST_OVERLAY_PERMISSION -> {
-                requestExactAlarmInFlow()
+                if (fromSettings) refreshAllPermissionStatus() else requestExactAlarmInFlow()
             }
-            REQUEST_EXACT_ALARM, REQUEST_TURN_SCREEN_ON -> {
-                // Refresh status badges if in settings mode
-                if (fromSettings) {
-                    val exactAlarmButton = findViewById<Button>(R.id.exactAlarmButton)
-                    val exactAlarmStatus = findViewById<TextView>(R.id.exactAlarmStatus)
-                    val turnScreenOnButton = findViewById<Button>(R.id.turnScreenOnButton)
-                    val turnScreenOnStatus = findViewById<TextView>(R.id.turnScreenOnStatus)
-                    refreshPermissionStatus(exactAlarmButton, exactAlarmStatus, turnScreenOnButton, turnScreenOnStatus)
-                } else {
-                    requestAccessibilityService()
-                }
+            REQUEST_EXACT_ALARM -> {
+                if (fromSettings) refreshAllPermissionStatus() else requestTurnScreenOnInFlow()
+            }
+            REQUEST_TURN_SCREEN_ON -> {
+                if (fromSettings) refreshAllPermissionStatus() else requestAccessibilityService()
             }
             REQUEST_ACCESSIBILITY_SETTINGS -> {
-                // Whether enabled or not, proceed to launcher step
-                requestDefaultLauncher()
+                if (fromSettings) refreshAllPermissionStatus() else requestDefaultLauncher()
             }
             REQUEST_ROLE_HOME, REQUEST_HOME_SETTINGS -> {
-                // Whether accepted or not, proceed to main
                 launchMainActivity()
             }
         }
