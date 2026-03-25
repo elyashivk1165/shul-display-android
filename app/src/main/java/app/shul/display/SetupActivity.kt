@@ -1,5 +1,6 @@
 package app.shul.display
 
+import android.app.AlarmManager
 import android.app.role.RoleManager
 import android.content.ComponentName
 import android.content.Intent
@@ -12,8 +13,10 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -36,6 +39,8 @@ class SetupActivity : AppCompatActivity() {
         private const val REQUEST_HOME_SETTINGS = 1002
         private const val REQUEST_OVERLAY_PERMISSION = 1003
         private const val REQUEST_ACCESSIBILITY_SETTINGS = 1004
+        private const val REQUEST_EXACT_ALARM = 1005
+        private const val REQUEST_TURN_SCREEN_ON = 1006
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,6 +61,21 @@ class SetupActivity : AppCompatActivity() {
         if (!existingSlug.isNullOrBlank()) {
             slugInput.setText(existingSlug)
             slugInput.selectAll()
+        }
+
+        // Permissions section — shown only in settings mode (not first-time setup)
+        val permissionsSection = findViewById<View>(R.id.permissionsSection)
+        val exactAlarmButton = findViewById<Button>(R.id.exactAlarmButton)
+        val exactAlarmStatus = findViewById<TextView>(R.id.exactAlarmStatus)
+        val turnScreenOnButton = findViewById<Button>(R.id.turnScreenOnButton)
+        val turnScreenOnStatus = findViewById<TextView>(R.id.turnScreenOnStatus)
+
+        if (fromSettings) {
+            permissionsSection.visibility = View.VISIBLE
+            refreshPermissionStatus(exactAlarmButton, exactAlarmStatus, turnScreenOnButton, turnScreenOnStatus)
+
+            exactAlarmButton.setOnClickListener { requestExactAlarmPermission() }
+            turnScreenOnButton.setOnClickListener { requestTurnScreenOnPermission() }
         }
 
         saveButton.setOnClickListener {
@@ -96,6 +116,133 @@ class SetupActivity : AppCompatActivity() {
         }
     }
 
+    private fun canScheduleExactAlarms(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            return am.canScheduleExactAlarms()
+        }
+        return true
+    }
+
+    private fun hasTurnScreenOnPermission(): Boolean {
+        // TURN_SCREEN_ON was added in API 33; on older versions it's granted implicitly
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return checkSelfPermission("android.permission.TURN_SCREEN_ON") ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        return true
+    }
+
+    private fun refreshPermissionStatus(
+        exactAlarmButton: Button,
+        exactAlarmStatus: TextView,
+        turnScreenOnButton: Button,
+        turnScreenOnStatus: TextView
+    ) {
+        if (canScheduleExactAlarms()) {
+            exactAlarmStatus.text = "✓ הרשאה ניתנה"
+            exactAlarmStatus.setTextColor(0xFF22C55E.toInt())
+            exactAlarmButton.isEnabled = false
+            exactAlarmButton.alpha = 0.4f
+        } else {
+            exactAlarmStatus.text = "נדרשת לשעון שבת / הדלקת מסך בזמן קבוע"
+            exactAlarmStatus.setTextColor(0xFF64748B.toInt())
+            exactAlarmButton.isEnabled = true
+            exactAlarmButton.alpha = 1f
+        }
+
+        if (hasTurnScreenOnPermission()) {
+            turnScreenOnStatus.text = "✓ הרשאה ניתנה"
+            turnScreenOnStatus.setTextColor(0xFF22C55E.toInt())
+            turnScreenOnButton.isEnabled = false
+            turnScreenOnButton.alpha = 0.4f
+        } else {
+            turnScreenOnStatus.text = "נדרשת כדי שהמסך יידלק אוטומטית"
+            turnScreenOnStatus.setTextColor(0xFF64748B.toInt())
+            turnScreenOnButton.isEnabled = true
+            turnScreenOnButton.alpha = 1f
+        }
+    }
+
+    private fun requestExactAlarmPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            if (!am.canScheduleExactAlarms()) {
+                try {
+                    @Suppress("DEPRECATION")
+                    startActivityForResult(
+                        Intent(
+                            Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                            Uri.parse("package:$packageName")
+                        ),
+                        REQUEST_EXACT_ALARM
+                    )
+                } catch (e: Exception) {
+                    // Fallback to general alarm settings
+                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:$packageName")))
+                }
+            }
+        } else {
+            Toast.makeText(this, "הרשאה ניתנת אוטומטית במכשיר זה", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun requestTurnScreenOnPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            try {
+                // Opens Special App Access > Turn on screen
+                val intent = Intent("android.settings.TURN_SCREEN_ON_SETTINGS").apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                @Suppress("DEPRECATION")
+                startActivityForResult(intent, REQUEST_TURN_SCREEN_ON)
+            } catch (e: Exception) {
+                try {
+                    // Fallback: open general special access settings
+                    @Suppress("DEPRECATION")
+                    startActivityForResult(
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:$packageName")),
+                        REQUEST_TURN_SCREEN_ON
+                    )
+                } catch (e2: Exception) {
+                    Toast.makeText(this, "פתח הגדרות > אפליקציות > גישה מיוחדת > הפעלת המסך", Toast.LENGTH_LONG).show()
+                }
+            }
+        } else {
+            Toast.makeText(this, "הרשאה ניתנת אוטומטית במכשיר זה", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun requestExactAlarmInFlow() {
+        // Called during initial setup flow (not from settings button)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            if (!am.canScheduleExactAlarms()) {
+                AlertDialog.Builder(this)
+                    .setTitle("הרשאת שעון מעורר")
+                    .setMessage("כדי שהמסך יידלק ויכבה בשעות שהגדרת, יש לאפשר קביעת שעוני מעורר מדויקים.\n\nלחץ אישור ואפשר את ההרשאה.")
+                    .setPositiveButton("אישור") { _, _ ->
+                        try {
+                            @Suppress("DEPRECATION")
+                            startActivityForResult(
+                                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                                    Uri.parse("package:$packageName")),
+                                REQUEST_EXACT_ALARM
+                            )
+                        } catch (e: Exception) {
+                            requestAccessibilityService()
+                        }
+                    }
+                    .setNegativeButton("דלג") { _, _ -> requestAccessibilityService() }
+                    .show()
+                return
+            }
+        }
+        requestAccessibilityService()
+    }
+
     private fun requestOverlayPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             AlertDialog.Builder(this)
@@ -112,11 +259,11 @@ class SetupActivity : AppCompatActivity() {
                     )
                 }
                 .setNegativeButton("דלג") { _, _ ->
-                    requestAccessibilityService()
+                    requestExactAlarmInFlow()
                 }
                 .show()
         } else {
-            requestAccessibilityService()
+            requestExactAlarmInFlow()
         }
     }
 
@@ -256,8 +403,19 @@ class SetupActivity : AppCompatActivity() {
         super.onActivityResult(requestCode, resultCode, data)
         when (requestCode) {
             REQUEST_OVERLAY_PERMISSION -> {
-                // Whether granted or not, proceed to accessibility service step
-                requestAccessibilityService()
+                requestExactAlarmInFlow()
+            }
+            REQUEST_EXACT_ALARM, REQUEST_TURN_SCREEN_ON -> {
+                // Refresh status badges if in settings mode
+                if (fromSettings) {
+                    val exactAlarmButton = findViewById<Button>(R.id.exactAlarmButton)
+                    val exactAlarmStatus = findViewById<TextView>(R.id.exactAlarmStatus)
+                    val turnScreenOnButton = findViewById<Button>(R.id.turnScreenOnButton)
+                    val turnScreenOnStatus = findViewById<TextView>(R.id.turnScreenOnStatus)
+                    refreshPermissionStatus(exactAlarmButton, exactAlarmStatus, turnScreenOnButton, turnScreenOnStatus)
+                } else {
+                    requestAccessibilityService()
+                }
             }
             REQUEST_ACCESSIBILITY_SETTINGS -> {
                 // Whether enabled or not, proceed to launcher step
