@@ -6,7 +6,6 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
@@ -70,11 +69,13 @@ class ScreenScheduleManager(private val context: Context) {
             )
 
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, cal.timeInMillis, pi)
-            } else {
-                alarmManager.setExact(AlarmManager.RTC_WAKEUP, cal.timeInMillis, pi)
-            }
+            // setAlarmClock fires even in deep Doze mode — guaranteed delivery unlike setExactAndAllowWhileIdle
+            val showPi = PendingIntent.getActivity(
+                context, 0,
+                Intent(context, MainActivity::class.java),
+                PendingIntent.FLAG_IMMUTABLE
+            )
+            alarmManager.setAlarmClock(AlarmManager.AlarmClockInfo(cal.timeInMillis, showPi), pi)
             Log.i(TAG, "Alarm scheduled: $action day=$day (calDay=${day+1}) at $hour:$minute rc=$requestCode (${cal.time})")
         }
 
