@@ -133,32 +133,6 @@ object SupabaseClient {
         }
     }
 
-    suspend fun markCommandExecuted(commandId: String) {
-        withContext(Dispatchers.IO) {
-            try {
-                val body = JSONObject().apply {
-                    put("executed_at", nowIso())
-                }
-
-                val url = URL("$SUPABASE_URL/rest/v1/device_commands?id=eq.$commandId")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "PATCH"
-                    doOutput = true
-                    connectTimeout = 10_000
-                    readTimeout = 10_000
-                    headers().forEach { (k, v) -> setRequestProperty(k, v) }
-                }
-
-                conn.outputStream.bufferedWriter().use { it.write(body.toString()) }
-                val code = conn.responseCode
-                Log.d(TAG, "markCommandExecuted response: $code")
-                conn.disconnect()
-            } catch (e: Exception) {
-                Log.e(TAG, "markCommandExecuted failed", e)
-            }
-        }
-    }
-
     /**
      * Write result and result_message back to the device_commands row so
      * the admin panel can poll for completion status.
