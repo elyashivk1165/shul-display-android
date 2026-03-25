@@ -28,13 +28,10 @@ class BootForegroundService : Service() {
 
         startForeground(NOTIFICATION_ID, notification)
 
-        Log.d(TAG, "Boot: starting MainActivity (it will handle slug check)")
+        Log.d(TAG, "Boot: starting MainActivity via ScreenWakeHelper (it will handle slug check)")
 
         try {
-            val intent = Intent(this, MainActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            }
-            startActivity(intent)
+            ScreenWakeHelper.wakeToApp(this)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to launch activity from foreground service", e)
         }

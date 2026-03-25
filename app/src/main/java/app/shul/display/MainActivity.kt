@@ -84,6 +84,7 @@ class MainActivity : AppCompatActivity() {
             applyWakeScreenFlags()
         }
         setContentView(R.layout.activity_main)
+        setupKioskMode()
         enableFullscreen()
 
         prefs = getSharedPreferences("shul_display_prefs", MODE_PRIVATE)
@@ -304,6 +305,7 @@ class MainActivity : AppCompatActivity() {
             if (!ScreenScheduleManager.isDeviceAdminActive(this@MainActivity)) {
                 add("🔑  הפעל שליטת מסך (נדרש פעם אחת)")
             }
+            add("⚙️  מצב קיוסק מלא (Device Owner)")
             add("🏠  הגדר כ-Launcher")
             add("🔲  כבה מסך עכשיו")
             add("🚪  סגור אפליקציה")
@@ -319,6 +321,7 @@ class MainActivity : AppCompatActivity() {
                     label.startsWith("⬆️") -> checkForUpdateManual()
                     label.startsWith("🌙") -> showScheduleDialog()
                     label.startsWith("🔑") -> requestDeviceAdmin()
+                    label.startsWith("⚙️") -> showKioskModeDialog()
                     label.startsWith("🏠") -> requestLauncherRole()
                     label.startsWith("🔲") -> ScreenScheduleManager.lockScreen(this)
                     label.startsWith("🚪") -> finishAndRemoveTask()
@@ -403,6 +406,42 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "לוח הזמנים בוטל", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("ביטול", null)
+            .show()
+    }
+
+    private fun setupKioskMode() {
+        val dpm = getSystemService(DevicePolicyManager::class.java) ?: return
+        val adminComponent = ComponentName(this, ShulDeviceAdminReceiver::class.java)
+
+        if (dpm.isDeviceOwnerApp(packageName)) {
+            try {
+                // Disable keyguard (lock screen) entirely
+                dpm.setKeyguardDisabled(adminComponent, true)
+                // Allow lock task for this package
+                dpm.setLockTaskPackages(adminComponent, arrayOf(packageName))
+                // Start lock task mode (app pinned to screen)
+                startLockTask()
+                Log.i(TAG, "Lock task mode started (Device Owner)")
+            } catch (e: Exception) {
+                Log.w(TAG, "Lock task setup failed: ${e.message}")
+            }
+        } else if (dpm.isAdminActive(adminComponent)) {
+            // Device Admin only — just try lock task (may work on some devices)
+            try {
+                startLockTask()
+                Log.i(TAG, "Lock task mode started (Device Admin)")
+            } catch (e: SecurityException) {
+                Log.w(TAG, "Lock task requires Device Owner: ${e.message}")
+            }
+        }
+    }
+
+    private fun showKioskModeDialog() {
+        if (isFinishing || isDestroyed) return
+        AlertDialog.Builder(this)
+            .setTitle("מצב קיוסק מלא")
+            .setMessage("להפעלת מצב קיוסק מלא, חבר ADB והפעל:\n\nadb shell dpm set-device-owner app.shul.display/.ShulDeviceAdminReceiver\n\nלאחר מכן הפעל מחדש את האפליקציה.")
+            .setPositiveButton("הבנתי", null)
             .show()
     }
 

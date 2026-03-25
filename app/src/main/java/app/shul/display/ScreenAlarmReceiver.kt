@@ -58,17 +58,8 @@ class ScreenAlarmReceiver : BroadcastReceiver() {
     }
 
     private fun handleScreenOn(context: Context) {
-        // Start MainActivity - its onCreate/onResume will call setTurnScreenOn(true)
-        val intent = Intent(context, MainActivity::class.java).apply {
-            addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK or
-                Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
-                Intent.FLAG_ACTIVITY_SINGLE_TOP
-            )
-            putExtra("wake_screen", true)
-        }
-        context.startActivity(intent)
-        // WakeLock released after 60s or when activity is running
+        ScreenWakeHelper.wakeToApp(context)
+        // WakeLock stays acquired — released in MainActivity.applyWakeScreenFlags()
     }
 
     private fun handleScreenOff(context: Context) {

@@ -1,8 +1,10 @@
 package app.shul.display
 
 import android.app.*
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -36,6 +38,18 @@ class DisplayForegroundService : Service() {
     private var heartbeatJob: Job? = null
     private var realtimeListener: RealtimeCommandListener? = null
 
+    private val screenOnReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == Intent.ACTION_SCREEN_ON) {
+                // Screen turned on by any means — bring our app to front
+                serviceScope.launch {
+                    delay(500) // Brief delay for screen to stabilize
+                    ScreenWakeHelper.wakeToApp(context)
+                }
+            }
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
@@ -49,6 +63,12 @@ class DisplayForegroundService : Service() {
         }
         if (realtimeListener == null) {
             startRealtimeListener()
+        }
+
+        try {
+            registerReceiver(screenOnReceiver, IntentFilter(Intent.ACTION_SCREEN_ON))
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not register screen on receiver: ${e.message}")
         }
 
         return START_STICKY
@@ -220,17 +240,8 @@ class DisplayForegroundService : Service() {
                 ScreenScheduleManager.lockScreen(applicationContext)
             }
             "SCREEN_ON" -> {
-                // Acquire wake lock first to keep CPU awake while starting activity
                 ScreenAlarmReceiver.acquireWakeLock(applicationContext)
-
-                // Start MainActivity with wake flags
-                val wakeIntent = Intent(this, MainActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                    putExtra("wake_screen", true)
-                }
-                withContext(Dispatchers.Main) {
-                    startActivity(wakeIntent)
-                }
+                ScreenWakeHelper.wakeToApp(applicationContext)
             }
             "SET_SCHEDULE" -> {
                 val offTime = cmd.payload["off_time"] as? String
@@ -284,6 +295,7 @@ class DisplayForegroundService : Service() {
         heartbeatJob?.cancel()
         realtimeListener?.stop()
         realtimeListener = null
+        try { unregisterReceiver(screenOnReceiver) } catch (e: Exception) { }
         serviceScope.cancel()
         super.onDestroy()
     }
