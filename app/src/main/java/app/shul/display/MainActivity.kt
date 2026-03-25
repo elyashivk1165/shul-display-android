@@ -2,6 +2,7 @@ package app.shul.display
 
 import android.annotation.SuppressLint
 import android.app.AlertDialog
+import android.app.Dialog
 import android.app.KeyguardManager
 import android.app.role.RoleManager
 import android.content.Intent
@@ -12,8 +13,10 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
@@ -290,49 +293,94 @@ class MainActivity : AppCompatActivity() {
 
     // ── Settings dialog ─────────────────────────────────────────────────────
 
+    private data class SettingsAction(
+        val icon: String,
+        val label: String,
+        val subtitle: String? = null,
+        val isDanger: Boolean = false,
+        val sectionBreakBefore: Boolean = false,
+        val action: () -> Unit
+    )
+
     private fun showSettingsDialog() {
         if (isFinishing || isDestroyed) return
-        val items = buildList {
-            add("🔄  רענן מסך")
-            add("✏️  שנה סלאג")
-            add("⬆️  בדוק עדכונים")
-            val (offTime, onTime) = ScreenScheduleManager.getSchedule(this@MainActivity)
-            if (offTime != null) {
-                add("🌙  לוח זמנים: כיבוי $offTime | הדלקה $onTime")
-            } else {
-                add("🌙  הגדר לוח זמנים למסך")
-            }
-            if (!ScreenScheduleManager.isDeviceAdminActive(this@MainActivity)) {
-                add("🔑  הפעל שליטת מסך (נדרש פעם אחת)")
-            }
-            add("⚙️  מצב קיוסק מלא (Device Owner)")
-            add("🏠  הגדר כ-Launcher")
-            add("🔐  הרשאות אפליקציה")
-            add("🔲  כבה מסך עכשיו")
-            add("🚪  סגור אפליקציה")
-        }.toTypedArray()
 
-        AlertDialog.Builder(this)
-            .setTitle("הגדרות")
-            .setItems(items) { _, which ->
-                val label = items[which]
-                when {
-                    label.startsWith("🔄") -> webView.reload()
-                    label.startsWith("✏️") -> showChangeSlugDialog()
-                    label.startsWith("⬆️") -> checkForUpdateManual()
-                    label.startsWith("🌙") -> showScheduleDialog()
-                    label.startsWith("🔑") -> requestDeviceAdmin()
-                    label.startsWith("⚙️") -> showKioskModeDialog()
-                    label.startsWith("🏠") -> requestLauncherRole()
-                    label.startsWith("🔐") -> startActivity(
-                        Intent(this, SetupActivity::class.java).putExtra("from_settings", true)
-                    )
-                    label.startsWith("🔲") -> ScreenScheduleManager.lockScreen(this)
-                    label.startsWith("🚪") -> finishAndRemoveTask()
-                }
+        val (offTime, onTime, _) = ScreenScheduleManager.getSchedule(this)
+        val scheduleSubtitle = if (offTime != null) "כיבוי $offTime  •  הדלקה $onTime" else null
+
+        val actions = buildList {
+            add(SettingsAction("🔄", "רענן מסך") { webView.reload() })
+            add(SettingsAction("✏️", "שנה סלאג") { showChangeSlugDialog() })
+            add(SettingsAction("⬆️", "בדוק עדכונים") { checkForUpdateManual() })
+            add(SettingsAction("🌙", "לוח זמנים למסך", scheduleSubtitle) { showScheduleDialog() })
+            if (!ScreenScheduleManager.isDeviceAdminActive(this@MainActivity)) {
+                add(SettingsAction("🔑", "הפעל שליטת מסך", "נדרש פעם אחת") { requestDeviceAdmin() })
             }
-            .setNegativeButton("ביטול", null)
-            .show()
+            add(SettingsAction("⚙️", "מצב קיוסק מלא", "Device Owner", sectionBreakBefore = true) { showKioskModeDialog() })
+            add(SettingsAction("🏠", "הגדר כ-Launcher") { requestLauncherRole() })
+            add(SettingsAction("🔐", "הרשאות אפליקציה") {
+                startActivity(Intent(this@MainActivity, SetupActivity::class.java).putExtra("from_settings", true))
+            })
+            add(SettingsAction("🔲", "כבה מסך עכשיו", isDanger = true, sectionBreakBefore = true) {
+                ScreenScheduleManager.lockScreen(this@MainActivity)
+            })
+            add(SettingsAction("🚪", "סגור אפליקציה", isDanger = true) { finishAndRemoveTask() })
+        }
+
+        val dialogView = layoutInflater.inflate(R.layout.dialog_settings, null)
+
+        // Set version in header
+        dialogView.findViewById<TextView>(R.id.dialogVersionText).text =
+            "גרסה ${DeviceUtils.getAppVersion(this)}"
+
+        val container = dialogView.findViewById<LinearLayout>(R.id.settingsItemsContainer)
+        val dialog = Dialog(this, R.style.Theme_ShulDisplay_Dialog)
+        dialog.setContentView(dialogView)
+        dialog.window?.apply {
+            setLayout(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            setGravity(Gravity.CENTER)
+        }
+
+        actions.forEachIndexed { index, action ->
+            // Section break — stronger divider before new group
+            if (action.sectionBreakBefore && index > 0) {
+                val spacer = View(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, 1
+                    ).also { lp -> lp.setMargins(0, 6, 0, 6) }
+                    setBackgroundColor(0xFF1E293B.toInt())
+                }
+                container.addView(spacer)
+            }
+
+            val itemView = layoutInflater.inflate(R.layout.dialog_settings_item, container, false)
+            itemView.findViewById<TextView>(R.id.itemIcon).text = action.icon
+
+            val labelColor = if (action.isDanger) 0xFFF87171.toInt() else 0xFFF8FAFC.toInt()
+            itemView.findViewById<TextView>(R.id.itemLabel).apply {
+                text = action.label
+                setTextColor(labelColor)
+            }
+
+            val subtitleView = itemView.findViewById<TextView>(R.id.itemSubtitle)
+            if (action.subtitle != null) {
+                subtitleView.text = action.subtitle
+                subtitleView.visibility = View.VISIBLE
+            }
+
+            if (action.isDanger) {
+                itemView.findViewById<TextView>(R.id.itemChevron)
+                    .setTextColor(0xFF7F1D1D.toInt())
+            }
+
+            itemView.setOnClickListener {
+                dialog.dismiss()
+                action.action()
+            }
+            container.addView(itemView)
+        }
+
+        dialog.show()
     }
 
     private fun showChangeSlugDialog() {
