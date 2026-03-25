@@ -307,6 +307,7 @@ class MainActivity : AppCompatActivity() {
             }
             add("⚙️  מצב קיוסק מלא (Device Owner)")
             add("🏠  הגדר כ-Launcher")
+            add("🔐  הרשאות אפליקציה")
             add("🔲  כבה מסך עכשיו")
             add("🚪  סגור אפליקציה")
         }.toTypedArray()
@@ -323,6 +324,9 @@ class MainActivity : AppCompatActivity() {
                     label.startsWith("🔑") -> requestDeviceAdmin()
                     label.startsWith("⚙️") -> showKioskModeDialog()
                     label.startsWith("🏠") -> requestLauncherRole()
+                    label.startsWith("🔐") -> startActivity(
+                        Intent(this, SetupActivity::class.java).putExtra("from_settings", true)
+                    )
                     label.startsWith("🔲") -> ScreenScheduleManager.lockScreen(this)
                     label.startsWith("🚪") -> finishAndRemoveTask()
                 }
