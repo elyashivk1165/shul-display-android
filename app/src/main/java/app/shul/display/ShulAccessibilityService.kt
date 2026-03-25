@@ -25,6 +25,25 @@ class ShulAccessibilityService : AccessibilityService() {
     companion object {
         private const val TAG = "ShulA11y"
 
+        // Singleton reference so other components can call lockScreen()
+        @Volatile var instance: ShulAccessibilityService? = null
+
+        /**
+         * Locks the screen via GLOBAL_ACTION_LOCK_SCREEN.
+         * On many Android TV boxes this triggers a proper standby that sends
+         * HDMI-CEC standby to the connected TV — unlike dpm.lockNow().
+         * Returns true if the action was performed, false if service not running.
+         */
+        fun lockScreen(): Boolean {
+            val svc = instance ?: return false
+            return try {
+                svc.performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)
+            } catch (e: Exception) {
+                Log.e(TAG, "lockScreen via a11y failed: ${e.message}")
+                false
+            }
+        }
+
         /**
          * Returns true if this service is currently enabled in accessibility settings.
          */
@@ -53,8 +72,14 @@ class ShulAccessibilityService : AccessibilityService() {
     }
 
     override fun onServiceConnected() {
+        instance = this
         Log.i(TAG, "Service connected — launching MainActivity")
         launchMain()
+    }
+
+    override fun onDestroy() {
+        if (instance === this) instance = null
+        super.onDestroy()
     }
 
     private fun launchMain() {

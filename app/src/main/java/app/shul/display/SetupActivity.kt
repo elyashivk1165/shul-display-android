@@ -74,6 +74,7 @@ class SetupActivity : AppCompatActivity() {
             findViewById<Button>(R.id.accessibilityButton).setOnClickListener {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             }
+            findViewById<Button>(R.id.hdmiCecButton).setOnClickListener { openHdmiCecSettings() }
         }
 
         saveButton.setOnClickListener {
@@ -225,6 +226,29 @@ class SetupActivity : AppCompatActivity() {
         } else {
             Toast.makeText(this, "הרשאה ניתנת אוטומטית במכשיר זה", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun openHdmiCecSettings() {
+        val intents = listOf(
+            // Xiaomi / MIUI TV
+            Intent("com.android.tv.settings.HDMI_CEC"),
+            // Generic Android TV
+            Intent("android.settings.HDMI_CEC_SETTINGS"),
+            // Sony / other TV brands
+            Intent().setClassName("com.android.tv.settings", "com.android.tv.settings.connectivity.HdmiCecFragment"),
+            // Fallback: Device preferences (Android TV)
+            Intent("android.settings.DEVICE_PREFERENCES"),
+            // Last resort: general settings
+            Intent(Settings.ACTION_SETTINGS)
+        )
+        for (intent in intents) {
+            try {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+                return
+            } catch (_: Exception) {}
+        }
+        Toast.makeText(this, "פתח הגדרות → העדפות מכשיר → HDMI-CEC", Toast.LENGTH_LONG).show()
     }
 
     private fun requestExactAlarmInFlow() {

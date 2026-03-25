@@ -131,11 +131,20 @@ class ScreenScheduleManager(private val context: Context) {
         }
 
         fun lockScreen(context: Context) {
+            // Method 1: Accessibility GLOBAL_ACTION_LOCK_SCREEN
+            // On Android TV boxes with HDMI-CEC enabled this triggers proper standby
+            // which sends a CEC standby signal to the connected TV.
+            val lockedViaA11y = ShulAccessibilityService.lockScreen()
+            if (lockedViaA11y) {
+                Log.i(TAG, "Locking screen via AccessibilityService (HDMI-CEC standby may follow)")
+                return
+            }
+            // Method 2: DevicePolicyManager fallback
             try {
                 val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
                 val adminComponent = ComponentName(context, ShulDeviceAdminReceiver::class.java)
                 if (dpm.isAdminActive(adminComponent)) {
-                    Log.i(TAG, "Locking screen via DevicePolicyManager")
+                    Log.i(TAG, "Locking screen via DevicePolicyManager (fallback)")
                     dpm.lockNow()
                 } else {
                     Log.w(TAG, "Device admin not active, cannot lock screen")

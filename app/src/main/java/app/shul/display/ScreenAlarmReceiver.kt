@@ -89,6 +89,15 @@ class ScreenAlarmReceiver : BroadcastReceiver() {
     }
 
     private fun handleScreenOff(context: Context) {
+        // Method 1: Accessibility GLOBAL_ACTION_LOCK_SCREEN
+        // On Android TV boxes this may trigger proper standby + HDMI-CEC TV off signal.
+        val lockedViaA11y = ShulAccessibilityService.lockScreen()
+        if (lockedViaA11y) {
+            Log.i(TAG, "Screen locked via AccessibilityService (HDMI-CEC standby may follow)")
+            return
+        }
+        // Method 2: fallback — DevicePolicyManager (doesn't trigger HDMI-CEC on most devices)
+        Log.w(TAG, "A11y not available, falling back to dpm.lockNow()")
         val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
         try {
             dpm.lockNow()
