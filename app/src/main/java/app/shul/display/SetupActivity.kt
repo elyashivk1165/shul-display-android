@@ -1,10 +1,15 @@
 package app.shul.display
 
 import android.app.role.RoleManager
+import android.content.ComponentName
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.widget.Button
@@ -29,6 +34,7 @@ class SetupActivity : AppCompatActivity() {
         private const val TAG = "SetupActivity"
         private const val REQUEST_ROLE_HOME = 1001
         private const val REQUEST_HOME_SETTINGS = 1002
+        private const val REQUEST_OVERLAY_PERMISSION = 1003
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -84,12 +90,41 @@ class SetupActivity : AppCompatActivity() {
                 MainActivity.instance?.updateSlug(slug)
                 launchMainActivity()
             } else {
-                requestDefaultLauncher()
+                requestOverlayPermission()
             }
         }
     }
 
+    private fun requestOverlayPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            AlertDialog.Builder(this)
+                .setTitle("הרשאה נדרשת")
+                .setMessage("כדי שהתצוגה תופיע אוטומטית לאחר הפעלת המכשיר, נדרשת הרשאת \"הצגה מעל אפליקציות אחרות\".\n\nלחץ אישור ואפשר את ההרשאה.")
+                .setPositiveButton("אישור") { _, _ ->
+                    @Suppress("DEPRECATION")
+                    startActivityForResult(
+                        Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:$packageName")
+                        ),
+                        REQUEST_OVERLAY_PERMISSION
+                    )
+                }
+                .setNegativeButton("דלג") { _, _ ->
+                    requestDefaultLauncher()
+                }
+                .show()
+        } else {
+            requestDefaultLauncher()
+        }
+    }
+
     private fun requestDefaultLauncher() {
+        if (fromSettings) {
+            launchMainActivity()
+            return
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val roleManager = getSystemService(RoleManager::class.java)
             if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) {
@@ -101,7 +136,7 @@ class SetupActivity : AppCompatActivity() {
                         return
                     } catch (e: Exception) {
                         Log.w(TAG, "RoleManager failed: ${e.message}")
-                        // Fall through to settings fallback
+                        // Fall through to FakeLauncher trick
                     }
                 } else {
                     // Already the default launcher — go straight to main
@@ -110,14 +145,44 @@ class SetupActivity : AppCompatActivity() {
                     return
                 }
             } else {
-                Log.w(TAG, "ROLE_HOME not available on this device, falling back to settings")
+                Log.w(TAG, "ROLE_HOME not available on this device, falling back to FakeLauncher")
             }
-            // Fallback for Android Q+: show HOME_SETTINGS with explanation dialog
-            showManualLauncherDialog()
-        } else {
-            // Pre-Q fallback: open home settings with explanation dialog
-            showManualLauncherDialog()
         }
+
+        // Fallback: FakeLauncher trick
+        triggerLauncherChooser()
+        // After short delay, proceed to main
+        Handler(Looper.getMainLooper()).postDelayed({
+            launchMainActivity()
+        }, 3000L)
+    }
+
+    private fun triggerLauncherChooser() {
+        val pm = packageManager
+        val fakeComponent = ComponentName(this, FakeLauncherActivity::class.java)
+
+        // Enable fake launcher to trigger chooser
+        pm.setComponentEnabledSetting(
+            fakeComponent,
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+            PackageManager.DONT_KILL_APP
+        )
+
+        // Open home intent to trigger chooser
+        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_HOME)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(homeIntent)
+
+        // Re-disable after short delay
+        Handler(Looper.getMainLooper()).postDelayed({
+            pm.setComponentEnabledSetting(
+                fakeComponent,
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP
+            )
+        }, 2000L)
     }
 
     private fun showManualLauncherDialog() {
@@ -152,9 +217,15 @@ class SetupActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_ROLE_HOME || requestCode == REQUEST_HOME_SETTINGS) {
-            // Whether accepted or not, proceed to main
-            launchMainActivity()
+        when (requestCode) {
+            REQUEST_OVERLAY_PERMISSION -> {
+                // Whether granted or not, proceed to request launcher role
+                requestDefaultLauncher()
+            }
+            REQUEST_ROLE_HOME, REQUEST_HOME_SETTINGS -> {
+                // Whether accepted or not, proceed to main
+                launchMainActivity()
+            }
         }
     }
 

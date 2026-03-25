@@ -19,26 +19,26 @@ class BootForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         createNotificationChannel()
-
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("מפעיל תצוגה...")
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
-
-        startForeground(NOTIFICATION_ID, notification)
-
-        Log.d(TAG, "Boot: starting MainActivity via ScreenWakeHelper (it will handle slug check)")
+        startForeground(NOTIFICATION_ID, buildNotification())
 
         try {
-            ScreenWakeHelper.wakeToApp(this)
+            // Try direct activity launch from foreground service
+            val launchIntent = Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            startActivity(launchIntent)
+            Log.i(TAG, "MainActivity launched from foreground service")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to launch activity from foreground service", e)
+            Log.w(TAG, "Foreground service launch failed, using notification: ${e.message}")
+            // Fallback: full-screen notification
+            ScreenWakeHelper.wakeToApp(this)
         }
 
         stopSelf()
         return START_NOT_STICKY
     }
+
+    override fun onBind(intent: Intent?): IBinder? = null
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -53,5 +53,11 @@ class BootForegroundService : Service() {
         }
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    private fun buildNotification(): android.app.Notification {
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("מפעיל תצוגה...")
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+    }
 }

@@ -3,7 +3,7 @@ package app.shul.display
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -11,51 +11,73 @@ import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
 
 class BootReceiver : BroadcastReceiver() {
-
     companion object {
         private const val TAG = "BootReceiver"
     }
 
     override fun onReceive(context: Context, intent: Intent?) {
-        when (intent?.action) {
-            Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_MY_PACKAGE_REPLACED -> {
-                Log.d(TAG, "Received ${intent.action}, starting BootForegroundService")
+        val action = intent?.action ?: return
+        if (action != Intent.ACTION_BOOT_COMPLETED &&
+            action != Intent.ACTION_MY_PACKAGE_REPLACED) return
 
-                try {
-                    val serviceIntent = Intent(context, BootForegroundService::class.java)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        context.startForegroundService(serviceIntent)
-                    } else {
-                        context.startService(serviceIntent)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to start BootForegroundService", e)
-                }
+        Log.i(TAG, "Boot/update received: $action")
 
-                // Start persistent display service
-                try {
-                    DisplayForegroundService.start(context)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to start DisplayForegroundService", e)
-                }
+        // Start DisplayForegroundService first (always)
+        DisplayForegroundService.start(context)
 
-                // Reschedule screen alarms after boot
-                ScreenScheduleManager.rescheduleAfterBoot(context)
+        // Reschedule screen alarms
+        try {
+            ScreenScheduleManager.rescheduleAfterBoot(context)
+        } catch (e: Exception) {
+            Log.e(TAG, "Schedule reschedule failed: ${e.message}")
+        }
 
-                try {
-                    val workRequest = PeriodicWorkRequestBuilder<CommandPollingWorker>(
-                        15, TimeUnit.MINUTES
-                    ).build()
-                    WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                        "command_poller",
-                        ExistingPeriodicWorkPolicy.KEEP,
-                        workRequest
-                    )
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to schedule WorkManager on boot", e)
-                }
+        // Schedule WorkManager command poller
+        try {
+            val workRequest = PeriodicWorkRequestBuilder<CommandPollingWorker>(
+                15, TimeUnit.MINUTES
+            ).build()
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                "command_poller",
+                ExistingPeriodicWorkPolicy.KEEP,
+                workRequest
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to schedule WorkManager on boot", e)
+        }
+
+        // Try to show MainActivity
+        launchMainActivity(context)
+    }
+
+    private fun launchMainActivity(context: Context) {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP
+            )
+        }
+
+        // Strategy 1: Direct launch (works if SYSTEM_ALERT_WINDOW granted OR if app is HOME launcher)
+        if (Settings.canDrawOverlays(context)) {
+            try {
+                context.startActivity(intent)
+                Log.i(TAG, "Direct activity launch succeeded (SYSTEM_ALERT_WINDOW)")
+                return
+            } catch (e: Exception) {
+                Log.w(TAG, "Direct launch failed: ${e.message}")
             }
+        }
+
+        // Strategy 2: Via BootForegroundService (foreground service can attempt launch)
+        try {
+            context.startForegroundService(
+                Intent(context, BootForegroundService::class.java)
+            )
+            Log.i(TAG, "BootForegroundService started")
+        } catch (e: Exception) {
+            Log.e(TAG, "BootForegroundService failed: ${e.message}")
         }
     }
 }
