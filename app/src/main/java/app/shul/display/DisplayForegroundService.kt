@@ -240,6 +240,15 @@ class DisplayForegroundService : Service() {
             "CLEAR_SCHEDULE" -> {
                 ScreenScheduleManager.setSchedule(applicationContext, null, null)
             }
+            "OPEN_SETTINGS" -> {
+                withContext(Dispatchers.Main) {
+                    val intent = Intent(this@DisplayForegroundService, SetupActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                        putExtra("from_settings", true)
+                    }
+                    startActivity(intent)
+                }
+            }
             else -> Log.w(TAG, "Unknown command: ${cmd.command}")
         }
     }
