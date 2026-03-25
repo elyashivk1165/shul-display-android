@@ -39,15 +39,6 @@ class SetupActivity : AppCompatActivity() {
         fromSettings = intent.getBooleanExtra("from_settings", false)
         val existingSlug = prefs.getString("slug", null)
 
-        // If slug is already configured and we're not coming from settings, skip to MainActivity
-        if (!existingSlug.isNullOrBlank() && !fromSettings) {
-            startActivity(Intent(this, MainActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            })
-            finish()
-            return
-        }
-
         setContentView(R.layout.activity_setup)
 
         val slugInput = findViewById<EditText>(R.id.slugInput)

@@ -3,7 +3,6 @@ package app.shul.display
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
@@ -29,20 +28,11 @@ class BootForegroundService : Service() {
 
         startForeground(NOTIFICATION_ID, notification)
 
-        val prefs = getSharedPreferences("shul_display_prefs", Context.MODE_PRIVATE)
-        val slug = prefs.getString("slug", null)
-
-        Log.d(TAG, "Boot: slug=${if (!slug.isNullOrBlank()) slug else "<empty>"}")
+        Log.d(TAG, "Boot: starting MainActivity (it will handle slug check)")
 
         try {
-            val intent = if (!slug.isNullOrBlank()) {
-                Intent(this, MainActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                }
-            } else {
-                Intent(this, SetupActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
+            val intent = Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             }
             startActivity(intent)
         } catch (e: Exception) {
