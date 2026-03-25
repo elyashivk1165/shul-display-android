@@ -50,8 +50,9 @@ class SetupActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_setup)
 
-        val slugInput = findViewById<EditText>(R.id.etSlug)
-        val saveButton = findViewById<Button>(R.id.btnSave)
+        val slugInput = findViewById<EditText>(R.id.slugInput)
+        val saveButton = findViewById<Button>(R.id.saveButton)
+        val errorText = findViewById<android.widget.TextView>(R.id.errorText)
 
         // Pre-fill existing slug when editing
         if (!existingSlug.isNullOrBlank()) {
@@ -62,13 +63,16 @@ class SetupActivity : AppCompatActivity() {
         saveButton.setOnClickListener {
             val slug = slugInput.text.toString().trim()
             if (slug.isBlank()) {
-                slugInput.error = "נא להכניס קוד בית הכנסת"
+                errorText.text = "נא להכניס קוד בית הכנסת"
+                errorText.visibility = android.view.View.VISIBLE
                 return@setOnClickListener
             }
             if (!isValidSlug(slug)) {
-                slugInput.error = "קוד לא תקין — אותיות, מספרים, מקף בלבד"
+                errorText.text = "קוד לא תקין — אותיות, מספרים, מקף בלבד"
+                errorText.visibility = android.view.View.VISIBLE
                 return@setOnClickListener
             }
+            errorText.visibility = android.view.View.GONE
 
             prefs.edit().putString("slug", slug).apply()
 

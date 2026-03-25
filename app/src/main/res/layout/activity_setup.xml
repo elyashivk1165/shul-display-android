@@ -1,125 +1,130 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="horizontal"
     android:background="#0F172A"
-    android:layoutDirection="rtl">
+    android:padding="0dp">
 
-    <!-- Background gradient overlay -->
-    <View
-        android:id="@+id/gradientOverlay"
-        android:layout_width="match_parent"
+    <!-- Left panel: branding -->
+    <LinearLayout
+        android:layout_width="0dp"
         android:layout_height="match_parent"
-        android:background="@drawable/bg_gradient"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:paddingStart="48dp"
+        android:paddingEnd="24dp"
+        android:background="#1E293B">
 
-    <!-- Logo / Icon area -->
-    <ImageView
-        android:id="@+id/logoIcon"
-        android:layout_width="72dp"
-        android:layout_height="72dp"
-        android:src="@drawable/ic_launcher_foreground"
-        android:tint="#6366F1"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toTopOf="@+id/tvWelcome"
-        android:layout_marginBottom="16dp" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="&#x1F54D;"
+            android:textSize="64sp"
+            android:gravity="center"
+            android:layout_marginBottom="16dp"/>
 
-    <!-- Welcome title -->
-    <TextView
-        android:id="@+id/tvWelcome"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="ברוכים הבאים"
-        android:textColor="#F8FAFC"
-        android:textSize="36sp"
-        android:fontFamily="sans-serif-light"
-        android:letterSpacing="0.05"
-        app:layout_constraintTop_toBottomOf="@+id/logoIcon"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toTopOf="@+id/tvSubtitle"
-        android:layout_marginBottom="8dp" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Shul Display"
+            android:textColor="#F8FAFC"
+            android:textSize="32sp"
+            android:textStyle="bold"
+            android:gravity="center"/>
 
-    <!-- Subtitle -->
-    <TextView
-        android:id="@+id/tvSubtitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="הגדרת מסך התצוגה"
-        android:textColor="#94A3B8"
-        android:textSize="18sp"
-        app:layout_constraintTop_toBottomOf="@+id/tvWelcome"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toTopOf="@+id/cardSetup"
-        android:layout_marginBottom="48dp" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="&#x05DE;&#x05E2;&#x05E8;&#x05DB;&#x05EA; &#x05EA;&#x05E6;&#x05D5;&#x05D2;&#x05D4; &#x05D7;&#x05DB;&#x05DE;&#x05D4;"
+            android:textColor="#94A3B8"
+            android:textSize="16sp"
+            android:gravity="center"
+            android:layout_marginTop="8dp"/>
 
-    <!-- Setup card -->
-    <androidx.cardview.widget.CardView
-        android:id="@+id/cardSetup"
-        android:layout_width="480dp"
-        android:layout_height="wrap_content"
-        app:cardBackgroundColor="#1E293B"
-        app:cardCornerRadius="20dp"
-        app:cardElevation="24dp"
-        app:layout_constraintTop_toBottomOf="@+id/tvSubtitle"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        android:layout_marginBottom="32dp">
+    </LinearLayout>
+
+    <!-- Right panel: form -->
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:fillViewport="true">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="32dp">
+            android:gravity="center_vertical"
+            android:paddingStart="48dp"
+            android:paddingEnd="48dp"
+            android:paddingTop="32dp"
+            android:paddingBottom="32dp"
+            android:minHeight="400dp">
 
-            <!-- Slug label -->
             <TextView
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="קוד בית הכנסת (Slug)"
+                android:text="&#x05D1;&#x05E8;&#x05D5;&#x05DB;&#x05D9;&#x05DD; &#x05D4;&#x05D1;&#x05D0;&#x05D9;&#x05DD;"
+                android:textColor="#F8FAFC"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="&#x05D4;&#x05D6;&#x05DF; &#x05D0;&#x05EA; &#x05DB;&#x05EA;&#x05D5;&#x05D1;&#x05EA; &#x05D4;&#x05EA;&#x05E6;&#x05D5;&#x05D2;&#x05D4; &#x05DC;&#x05D4;&#x05EA;&#x05D7;&#x05DC;&#x05D4;"
+                android:textColor="#94A3B8"
+                android:textSize="14sp"
+                android:layout_marginBottom="32dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="&#x05DB;&#x05EA;&#x05D5;&#x05D1;&#x05EA; &#x05EA;&#x05E6;&#x05D5;&#x05D2;&#x05D4; (Slug)"
                 android:textColor="#CBD5E1"
                 android:textSize="14sp"
-                android:layout_marginBottom="8dp" />
+                android:layout_marginBottom="8dp"/>
 
-            <!-- Slug input -->
             <EditText
-                android:id="@+id/etSlug"
+                android:id="@+id/slugInput"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
-                android:background="@drawable/bg_input"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
+                android:background="#1E293B"
+                android:padding="16dp"
                 android:textColor="#F8FAFC"
-                android:textColorHint="#475569"
-                android:hint="לדוגמה: beit-knesset-aviv"
-                android:textSize="16sp"
-                android:inputType="text"
-                android:singleLine="true"
+                android:textColorHint="#64748B"
+                android:hint="&#x05DC;&#x05D3;&#x05D5;&#x05D2;&#x05DE;&#x05D0;: my-shul"
+                android:inputType="textNoSuggestions"
                 android:imeOptions="actionDone"
-                android:textDirection="ltr"
-                android:gravity="start|center_vertical"
-                android:layout_marginBottom="24dp" />
+                android:singleLine="true"
+                android:textSize="16sp"
+                android:layoutDirection="rtl"/>
 
-            <!-- Save button -->
+            <TextView
+                android:id="@+id/errorText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#EF4444"
+                android:textSize="13sp"
+                android:layout_marginTop="8dp"
+                android:visibility="gone"/>
+
             <Button
-                android:id="@+id/btnSave"
+                android:id="@+id/saveButton"
                 android:layout_width="match_parent"
                 android:layout_height="52dp"
-                android:text="התחל תצוגה"
+                android:layout_marginTop="24dp"
+                android:text="&#x05D4;&#x05EA;&#x05D7;&#x05DC; &#x05EA;&#x05E6;&#x05D5;&#x05D2;&#x05D4;"
                 android:textColor="#FFFFFF"
                 android:textSize="16sp"
-                android:background="@drawable/bg_button_primary" />
+                android:textStyle="bold"
+                android:background="@drawable/bg_button_primary"
+                android:stateListAnimator="@null"/>
 
         </LinearLayout>
-    </androidx.cardview.widget.CardView>
+    </ScrollView>
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+</LinearLayout>

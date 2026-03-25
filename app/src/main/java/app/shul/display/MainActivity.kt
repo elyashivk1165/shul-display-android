@@ -459,10 +459,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun openSettings() {
         if (!isDestroyed && !isFinishing) {
-            startActivity(Intent(this, SetupActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                putExtra("from_settings", true)
-            })
+            showSettingsDialog()
         }
     }
 
