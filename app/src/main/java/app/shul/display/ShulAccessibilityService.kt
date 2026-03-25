@@ -73,7 +73,15 @@ class ShulAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         instance = this
-        Log.i(TAG, "Service connected — launching MainActivity")
+        Log.i(TAG, "Service connected")
+        // Skip auto-launch if any of our activities are currently in the foreground.
+        // This prevents a loop where enabling the service from Settings immediately
+        // kicks the user out of Settings back into the app.
+        if (MainActivity.instance != null || SetupActivity.isVisible) {
+            Log.d(TAG, "App already in foreground — skipping auto-launch")
+            return
+        }
+        Log.i(TAG, "Launching MainActivity from accessibility service")
         launchMain()
     }
 

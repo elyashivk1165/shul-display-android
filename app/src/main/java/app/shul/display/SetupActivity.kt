@@ -41,7 +41,14 @@ class SetupActivity : AppCompatActivity() {
         private const val REQUEST_ACCESSIBILITY_SETTINGS = 1004
         private const val REQUEST_EXACT_ALARM = 1005
         private const val REQUEST_TURN_SCREEN_ON = 1006
+
+        /** True while SetupActivity is in the foreground — prevents accessibility
+         *  service from auto-launching MainActivity over the setup flow. */
+        @Volatile var isVisible = false
     }
+
+    override fun onStart() { super.onStart(); isVisible = true }
+    override fun onStop() { super.onStop(); isVisible = false }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
