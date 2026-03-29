@@ -73,44 +73,15 @@ class ShulAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         instance = this
-        Log.i(TAG, "Service connected")
-        // Skip auto-launch if any of our activities are currently in the foreground.
-        // This prevents a loop where enabling the service from Settings immediately
-        // kicks the user out of Settings back into the app.
-        if (MainActivity.instance != null || SetupActivity.isVisible) {
-            Log.d(TAG, "App already in foreground — skipping auto-launch")
-            return
-        }
-        Log.i(TAG, "Launching MainActivity from accessibility service")
-        launchMain()
+        Log.i(TAG, "Service connected — ready for lockScreen()")
+        // Do NOT launch any activity here. Android TV/Android 13+ disables accessibility
+        // services that immediately launch activities on connection (seen as malicious).
+        // Boot-time launch is handled by BootReceiver + DisplayForegroundService.
     }
 
     override fun onDestroy() {
         if (instance === this) instance = null
         super.onDestroy()
-    }
-
-    private fun launchMain() {
-        // Guard: only launch if slug is configured (avoid loop during first-time setup)
-        val prefs = getSharedPreferences("shul_display_prefs", Context.MODE_PRIVATE)
-        val slug = prefs.getString("slug", null)
-        if (slug.isNullOrBlank()) {
-            Log.d(TAG, "No slug configured, skipping auto-launch")
-            return
-        }
-
-        try {
-            val intent = Intent(this, MainActivity::class.java).apply {
-                addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK or
-                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                )
-            }
-            startActivity(intent)
-            Log.i(TAG, "MainActivity launched via AccessibilityService")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to launch MainActivity: ${e.message}")
-        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
