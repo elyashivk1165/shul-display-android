@@ -85,6 +85,9 @@ class ScreenAlarmReceiver : BroadcastReceiver() {
 
         // Method 2: Full-screen notification (backup — also wakes screen via CATEGORY_ALARM)
         ScreenWakeHelper.wakeToApp(context)
+
+        // Method 3: Belt-and-suspenders — explicitly wake screen via ScreenScheduleManager
+        ScreenScheduleManager.wakeScreen(context)
         // WakeLock stays acquired — released in MainActivity.applyWakeScreenFlags()
     }
 

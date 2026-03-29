@@ -170,7 +170,7 @@ class MainActivity : AppCompatActivity() {
                 safeBrowsingEnabled = true
             }
         }
-        webView.setBackgroundColor(android.graphics.Color.WHITE)
+        webView.setBackgroundColor(android.graphics.Color.BLACK)
         webView.webViewClient = object : WebViewClient() {
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
                 if (isDestroyed || isFinishing) return true

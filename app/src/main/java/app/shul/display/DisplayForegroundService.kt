@@ -45,6 +45,16 @@ class DisplayForegroundService : Service() {
                 serviceScope.launch {
                     delay(500) // Brief delay for screen to stabilize
                     ScreenWakeHelper.wakeToApp(context)
+                    ScreenScheduleManager.wakeScreen(context)
+                }
+                // Also start MainActivity to ensure FLAG_KEEP_SCREEN_ON is active
+                try {
+                    val activityIntent = Intent(context, MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                    }
+                    startActivity(activityIntent)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not start MainActivity from screenOnReceiver: ${e.message}")
                 }
             }
         }

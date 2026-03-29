@@ -100,9 +100,13 @@ class ScreenScheduleManager(private val context: Context) {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             for (i in 0..6) {
                 for (base in listOf(1000, 2000)) {
-                    val intent = Intent(context, ScreenAlarmReceiver::class.java)
+                    val rc = base + i
+                    val intent = Intent(context, ScreenAlarmReceiver::class.java).apply {
+                        this.action = if (base == 1000) "app.shul.display.SCREEN_OFF" else "app.shul.display.SCREEN_ON"
+                        putExtra("request_code", rc)
+                    }
                     val pi = PendingIntent.getBroadcast(
-                        context, base + i, intent,
+                        context, rc, intent,
                         PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
                     )
                     pi?.let { alarmManager.cancel(it) }
