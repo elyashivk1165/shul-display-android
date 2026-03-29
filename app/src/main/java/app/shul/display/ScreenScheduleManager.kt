@@ -150,11 +150,30 @@ class ScreenScheduleManager(private val context: Context) {
                 if (dpm.isAdminActive(adminComponent)) {
                     Log.i(TAG, "Locking screen via DevicePolicyManager (fallback)")
                     dpm.lockNow()
-                } else {
-                    Log.w(TAG, "Device admin not active, cannot lock screen")
+                    return
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to lock screen", e)
+                Log.e(TAG, "Failed to lock screen via DPM", e)
+            }
+            // Method 3: Dispatch KEYCODE_SLEEP via MainActivity — no permissions needed.
+            // Works on many Android TV boxes to trigger standby/screen-off.
+            val mainActivity = MainActivity.instance
+            if (mainActivity != null) {
+                try {
+                    val downEvent = android.view.KeyEvent(
+                        android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_SLEEP)
+                    val upEvent = android.view.KeyEvent(
+                        android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_SLEEP)
+                    mainActivity.runOnUiThread {
+                        mainActivity.dispatchKeyEvent(downEvent)
+                        mainActivity.dispatchKeyEvent(upEvent)
+                    }
+                    Log.i(TAG, "Sent KEYCODE_SLEEP via MainActivity (no-permission fallback)")
+                } catch (e: Exception) {
+                    Log.w(TAG, "KEYCODE_SLEEP dispatch failed: ${e.message}")
+                }
+            } else {
+                Log.w(TAG, "No lock method available (no a11y, no DPM, no MainActivity)")
             }
         }
 
