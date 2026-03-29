@@ -483,11 +483,12 @@ class MainActivity : AppCompatActivity() {
             }
         } else if (dpm.isAdminActive(adminComponent)) {
             // Device Admin only — just try lock task (may work on some devices)
+            // Catch ALL exceptions: some devices throw IllegalStateException or others, not just SecurityException
             try {
                 startLockTask()
                 Log.i(TAG, "Lock task mode started (Device Admin)")
-            } catch (e: SecurityException) {
-                Log.w(TAG, "Lock task requires Device Owner: ${e.message}")
+            } catch (e: Exception) {
+                Log.w(TAG, "Lock task not available without Device Owner: ${e.message}")
             }
         }
     }
