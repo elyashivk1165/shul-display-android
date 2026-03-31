@@ -37,6 +37,7 @@ class DisplayForegroundService : Service() {
     private var pollingJob: Job? = null
     private var heartbeatJob: Job? = null
     private var realtimeListener: RealtimeCommandListener? = null
+    private var screenReceiverRegistered = false
 
     private val screenOnReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -76,7 +77,16 @@ class DisplayForegroundService : Service() {
         }
 
         try {
-            registerReceiver(screenOnReceiver, IntentFilter(Intent.ACTION_SCREEN_ON))
+            if (!screenReceiverRegistered) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    registerReceiver(screenOnReceiver, IntentFilter(Intent.ACTION_SCREEN_ON),
+                        Context.RECEIVER_NOT_EXPORTED)
+                } else {
+                    @Suppress("UnspecifiedRegisterReceiverFlag")
+                    registerReceiver(screenOnReceiver, IntentFilter(Intent.ACTION_SCREEN_ON))
+                }
+                screenReceiverRegistered = true
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Could not register screen on receiver: ${e.message}")
         }
