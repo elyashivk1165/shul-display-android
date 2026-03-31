@@ -12,7 +12,8 @@ class RealtimeCommandListener(
     private val deviceId: String,
     private val supabaseUrl: String,
     private val supabaseKey: String,
-    private val onCommand: (DeviceCommand) -> Unit
+    private val onCommand: (DeviceCommand) -> Unit,
+    private val onConnected: (suspend () -> Unit)? = null
 ) {
     companion object {
         private const val TAG = "RealtimeListener"
@@ -63,6 +64,9 @@ class RealtimeCommandListener(
                 reconnectDelayMs = 2_000L
                 joinChannel(ws)
                 startHeartbeat(ws)
+                scope.launch {
+                    onConnected?.invoke()
+                }
             }
 
             override fun onMessage(ws: WebSocket, text: String) {

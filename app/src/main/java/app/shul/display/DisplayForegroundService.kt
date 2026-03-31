@@ -36,14 +36,13 @@ class DisplayForegroundService : Service() {
         Log.e(TAG, "Coroutine exception", e)
     }
 
-    // Fix 1: Deduplication set to prevent the same command executing twice (realtime + polling race)
+    // Deduplication set to prevent the same command executing twice (catch-up + realtime race)
     private val executedCommandIds = Collections.synchronizedSet(
         LinkedHashSet<String>()
     )
     private val MAX_EXECUTED_IDS = 100
 
-    // Track polling/heartbeat jobs so we never launch duplicates on START_STICKY restarts
-    private var pollingJob: Job? = null
+    // Track heartbeat job so we never launch duplicates on START_STICKY restarts
     private var heartbeatJob: Job? = null
     private var realtimeListener: RealtimeCommandListener? = null
     private var screenReceiverRegistered = false
@@ -75,9 +74,6 @@ class DisplayForegroundService : Service() {
         startForeground(NOTIFICATION_ID, buildNotification())
 
         // Guard: don't launch duplicate coroutines on START_STICKY restarts
-        if (pollingJob?.isActive != true) {
-            pollingJob = startCommandPolling()
-        }
         if (heartbeatJob?.isActive != true) {
             heartbeatJob = startHeartbeat()
         }
@@ -127,44 +123,6 @@ class DisplayForegroundService : Service() {
             .build()
     }
 
-    private fun startCommandPolling(): Job {
-        return serviceScope.launch(exceptionHandler) {
-            val deviceId = DeviceUtils.getDeviceId(applicationContext)
-            val backoff = ExponentialBackoff()
-            while (isActive) {
-                try {
-                    val commands = SupabaseClient.getPendingCommands(deviceId)
-                    for (cmd in commands) {
-                        // Fix 1: Skip duplicate commands already handled via realtime path
-                        if (!executedCommandIds.add(cmd.id)) {
-                            Log.w(TAG, "Skipping duplicate command ${cmd.id} (already executed)")
-                            continue
-                        }
-                        if (executedCommandIds.size > MAX_EXECUTED_IDS) {
-                            val oldest = executedCommandIds.first()
-                            executedCommandIds.remove(oldest)
-                        }
-                        try {
-                            executeCommand(cmd)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to execute command ${cmd.command}", e)
-                            SupabaseClient.reportCommandResult(
-                                cmd.id, "error",
-                                e.message?.take(500) ?: "Unknown error"
-                            )
-                        }
-                    }
-                    backoff.reset()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Polling error (attempt #${backoff.failureCount + 1})", e)
-                    delay(backoff.nextDelay())
-                    continue
-                }
-                delay(30_000)
-            }
-        }
-    }
-
     private fun startHeartbeat(): Job {
         return serviceScope.launch(exceptionHandler) {
             val deviceId = DeviceUtils.getDeviceId(applicationContext)
@@ -197,7 +155,7 @@ class DisplayForegroundService : Service() {
             supabaseKey = supabaseKey,
             onCommand = { cmd ->
                 serviceScope.launch(exceptionHandler) {
-                    // Fix 1: Skip duplicate commands already handled via polling path
+                    // Skip duplicate commands already handled via catch-up path
                     if (!executedCommandIds.add(cmd.id)) {
                         Log.w(TAG, "Skipping duplicate command ${cmd.id} (already executed)")
                         return@launch
@@ -216,6 +174,28 @@ class DisplayForegroundService : Service() {
                         )
                     }
                 }
+            },
+            onConnected = {
+                // Catch-up: fetch any commands missed while disconnected
+                val pending = SupabaseClient.getPendingCommands(deviceId)
+                pending.forEach { cmd ->
+                    if (executedCommandIds.add(cmd.id)) {
+                        if (executedCommandIds.size > MAX_EXECUTED_IDS) {
+                            val oldest = executedCommandIds.first()
+                            executedCommandIds.remove(oldest)
+                        }
+                        try {
+                            executeCommand(cmd)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Catch-up: failed to execute command ${cmd.command}", e)
+                            SupabaseClient.reportCommandResult(
+                                cmd.id, "error",
+                                e.message?.take(500) ?: "Unknown error"
+                            )
+                        }
+                    }
+                }
+                Log.i(TAG, "Catch-up fetch on reconnect: ${pending.size} pending commands")
             }
         )
         realtimeListener?.start()
@@ -354,7 +334,6 @@ class DisplayForegroundService : Service() {
     }
 
     override fun onDestroy() {
-        pollingJob?.cancel()
         heartbeatJob?.cancel()
         realtimeListener?.stop()
         realtimeListener = null
