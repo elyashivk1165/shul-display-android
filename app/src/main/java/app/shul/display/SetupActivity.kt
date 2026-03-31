@@ -245,25 +245,18 @@ class SetupActivity : AppCompatActivity() {
 
     private fun requestTurnScreenOnPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Note: "android.settings.TURN_SCREEN_ON_SETTINGS" renders as a black screen
+            // on some Android TV boxes — skip it and open app details directly.
             try {
-                // Opens Special App Access > Turn on screen
-                val intent = Intent("android.settings.TURN_SCREEN_ON_SETTINGS").apply {
-                    data = Uri.parse("package:$packageName")
-                }
                 @Suppress("DEPRECATION")
-                startActivityForResult(intent, REQUEST_TURN_SCREEN_ON)
+                startActivityForResult(
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:$packageName")),
+                    REQUEST_TURN_SCREEN_ON
+                )
+                Toast.makeText(this, "הגדרות → הרשאות → הפעלת המסך → אפשר", Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
-                try {
-                    // Fallback: open general special access settings
-                    @Suppress("DEPRECATION")
-                    startActivityForResult(
-                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                            Uri.parse("package:$packageName")),
-                        REQUEST_TURN_SCREEN_ON
-                    )
-                } catch (e2: Exception) {
-                    Toast.makeText(this, "פתח הגדרות > אפליקציות > גישה מיוחדת > הפעלת המסך", Toast.LENGTH_LONG).show()
-                }
+                Toast.makeText(this, "פתח הגדרות > אפליקציות > shul-display > הרשאות > הפעלת המסך", Toast.LENGTH_LONG).show()
             }
         } else {
             Toast.makeText(this, "הרשאה ניתנת אוטומטית במכשיר זה", Toast.LENGTH_SHORT).show()
@@ -322,12 +315,13 @@ class SetupActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasTurnScreenOnPermission()) {
             AlertDialog.Builder(this)
                 .setTitle("הפעלת המסך")
-                .setMessage("כדי שהמסך יידלק אוטומטית בשעה שהגדרת, יש לאפשר הרשאת \"הפעלת המסך\".\n\nבדף שייפתח: מצא את האפליקציה ואפשר.")
+                .setMessage("כדי שהמסך יידלק אוטומטית, יש לאפשר הרשאת \"הפעלת המסך\".\n\nבדף שייפתח:\nלחץ על «הרשאות» ← אפשר «הפעלת המסך»")
                 .setPositiveButton("אישור") { _, _ ->
                     try {
+                        // Open app details — TURN_SCREEN_ON_SETTINGS shows black screen on some boxes
                         @Suppress("DEPRECATION")
                         startActivityForResult(
-                            Intent("android.settings.TURN_SCREEN_ON_SETTINGS",
+                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                                 Uri.parse("package:$packageName")),
                             REQUEST_TURN_SCREEN_ON
                         )
