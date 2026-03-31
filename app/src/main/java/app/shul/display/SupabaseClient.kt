@@ -92,9 +92,12 @@ object SupabaseClient {
     suspend fun getPendingCommands(deviceId: String): List<DeviceCommand> {
         return withContext(Dispatchers.IO) {
             try {
+                // Fix 4: Only fetch commands created in the last 5 minutes to reject stale commands
+                val fiveMinutesAgo = java.time.Instant.now().minusSeconds(300).toString()
                 val url = URL(
                     "$SUPABASE_URL/rest/v1/device_commands" +
-                        "?device_id=eq.$deviceId&executed_at=is.null&order=created_at.asc"
+                        "?device_id=eq.$deviceId&executed_at=is.null&order=created_at.asc" +
+                        "&created_at=gte.$fiveMinutesAgo"
                 )
                 val conn = (url.openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"

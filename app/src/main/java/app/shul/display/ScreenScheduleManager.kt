@@ -134,31 +134,32 @@ class ScreenScheduleManager(private val context: Context) {
             return dpm.isAdminActive(adminComponent)
         }
 
-        fun lockScreen(context: Context) {
+        fun lockScreen(context: Context): Boolean {
             // Method 1: Accessibility GLOBAL_ACTION_LOCK_SCREEN
             // On Android TV boxes with HDMI-CEC enabled this triggers proper standby
             // which sends a CEC standby signal to the connected TV.
             val lockedViaA11y = ShulAccessibilityService.lockScreen()
             if (lockedViaA11y) {
                 Log.i(TAG, "Locking screen via AccessibilityService (HDMI-CEC standby may follow)")
-                return
+                return true
             }
             // Method 2: DevicePolicyManager fallback
             try {
                 val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
                 val adminComponent = ComponentName(context, ShulDeviceAdminReceiver::class.java)
                 if (dpm.isAdminActive(adminComponent)) {
-                    Log.i(TAG, "Locking screen via DevicePolicyManager (fallback)")
                     dpm.lockNow()
-                    return
+                    Log.i(TAG, "Locking screen via DevicePolicyManager (fallback)")
+                    return true
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to lock screen via DPM", e)
+                Log.e(TAG, "DPM lockNow failed: ${e.message}")
             }
             // Method 3: No further no-permission methods exist.
             // KEYCODE_SLEEP via dispatchKeyEvent does NOT trigger system screen-off.
             // Screen-off requires either Accessibility Service or Device Admin.
             Log.w(TAG, "lockScreen: all methods exhausted — A11y disabled, DPM not admin. Screen remains on.")
+            return false
         }
 
         fun wakeScreen(context: Context) {

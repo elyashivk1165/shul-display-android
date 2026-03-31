@@ -7,9 +7,12 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.os.IBinder
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import kotlinx.coroutines.*
+import java.util.Collections
 
 class DisplayForegroundService : Service() {
 
@@ -32,6 +35,12 @@ class DisplayForegroundService : Service() {
     private val exceptionHandler = CoroutineExceptionHandler { _, e ->
         Log.e(TAG, "Coroutine exception", e)
     }
+
+    // Fix 1: Deduplication set to prevent the same command executing twice (realtime + polling race)
+    private val executedCommandIds = Collections.synchronizedSet(
+        LinkedHashSet<String>()
+    )
+    private val MAX_EXECUTED_IDS = 100
 
     // Track polling/heartbeat jobs so we never launch duplicates on START_STICKY restarts
     private var pollingJob: Job? = null
@@ -126,9 +135,17 @@ class DisplayForegroundService : Service() {
                 try {
                     val commands = SupabaseClient.getPendingCommands(deviceId)
                     for (cmd in commands) {
+                        // Fix 1: Skip duplicate commands already handled via realtime path
+                        if (!executedCommandIds.add(cmd.id)) {
+                            Log.w(TAG, "Skipping duplicate command ${cmd.id} (already executed)")
+                            continue
+                        }
+                        if (executedCommandIds.size > MAX_EXECUTED_IDS) {
+                            val oldest = executedCommandIds.first()
+                            executedCommandIds.remove(oldest)
+                        }
                         try {
                             executeCommand(cmd)
-                            SupabaseClient.reportCommandResult(cmd.id, "success")
                         } catch (e: Exception) {
                             Log.e(TAG, "Failed to execute command ${cmd.command}", e)
                             SupabaseClient.reportCommandResult(
@@ -180,9 +197,17 @@ class DisplayForegroundService : Service() {
             supabaseKey = supabaseKey,
             onCommand = { cmd ->
                 serviceScope.launch(exceptionHandler) {
+                    // Fix 1: Skip duplicate commands already handled via polling path
+                    if (!executedCommandIds.add(cmd.id)) {
+                        Log.w(TAG, "Skipping duplicate command ${cmd.id} (already executed)")
+                        return@launch
+                    }
+                    if (executedCommandIds.size > MAX_EXECUTED_IDS) {
+                        val oldest = executedCommandIds.first()
+                        executedCommandIds.remove(oldest)
+                    }
                     try {
                         executeCommand(cmd)
-                        SupabaseClient.reportCommandResult(cmd.id, "success")
                     } catch (e: Exception) {
                         Log.e(TAG, "Realtime: failed to execute command ${cmd.command}", e)
                         SupabaseClient.reportCommandResult(
@@ -257,11 +282,27 @@ class DisplayForegroundService : Service() {
                 }
             }
             "SCREEN_OFF" -> {
-                ScreenScheduleManager.lockScreen(applicationContext)
+                // Fix 2: lockScreen now returns Boolean — report real result
+                val success = ScreenScheduleManager.lockScreen(applicationContext)
+                SupabaseClient.reportCommandResult(
+                    cmd.id,
+                    if (success) "success" else "error:no_lock_method_available"
+                )
             }
             "SCREEN_ON" -> {
-                ScreenAlarmReceiver.acquireWakeLock(applicationContext)
+                // Fix 3: Check permissions before attempting wake
+                val notificationsEnabled = NotificationManagerCompat.from(applicationContext).areNotificationsEnabled()
+                val hasOverlay = Settings.canDrawOverlays(applicationContext)
+
+                if (!notificationsEnabled && !hasOverlay) {
+                    Log.w(TAG, "SCREEN_ON: no notification permission and no overlay permission")
+                    SupabaseClient.reportCommandResult(cmd.id, "error:no_wake_permission")
+                    return
+                }
+
+                ScreenScheduleManager.wakeScreen(applicationContext)
                 ScreenWakeHelper.wakeToApp(applicationContext)
+                SupabaseClient.reportCommandResult(cmd.id, "success")
             }
             "SET_SCHEDULE" -> {
                 val offTime = cmd.payload["off_time"] as? String
@@ -302,11 +343,13 @@ class DisplayForegroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        alarmManager.set(
-            AlarmManager.RTC_WAKEUP,
-            System.currentTimeMillis() + 5_000,
-            pendingIntent
-        )
+        val triggerAt = System.currentTimeMillis() + 5_000
+        // Fix 5: Use setExactAndAllowWhileIdle so the alarm fires reliably even in Doze mode
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+        } else {
+            alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+        }
         super.onTaskRemoved(rootIntent)
     }
 
