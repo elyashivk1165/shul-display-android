@@ -155,31 +155,16 @@ class ScreenScheduleManager(private val context: Context) {
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to lock screen via DPM", e)
             }
-            // Method 3: Dispatch KEYCODE_SLEEP via MainActivity — no permissions needed.
-            // Works on many Android TV boxes to trigger standby/screen-off.
-            val mainActivity = MainActivity.instance
-            if (mainActivity != null) {
-                try {
-                    val downEvent = android.view.KeyEvent(
-                        android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_SLEEP)
-                    val upEvent = android.view.KeyEvent(
-                        android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_SLEEP)
-                    mainActivity.runOnUiThread {
-                        mainActivity.dispatchKeyEvent(downEvent)
-                        mainActivity.dispatchKeyEvent(upEvent)
-                    }
-                    Log.i(TAG, "Sent KEYCODE_SLEEP via MainActivity (no-permission fallback)")
-                } catch (e: Exception) {
-                    Log.w(TAG, "KEYCODE_SLEEP dispatch failed: ${e.message}")
-                }
-            } else {
-                Log.w(TAG, "No lock method available (no a11y, no DPM, no MainActivity)")
-            }
+            // Method 3: No further no-permission methods exist.
+            // KEYCODE_SLEEP via dispatchKeyEvent does NOT trigger system screen-off.
+            // Screen-off requires either Accessibility Service or Device Admin.
+            Log.w(TAG, "lockScreen: all methods exhausted — A11y disabled, DPM not admin. Screen remains on.")
         }
 
         fun wakeScreen(context: Context) {
             try {
-                // Method 1: PowerManager wake lock with ACQUIRE_CAUSES_WAKEUP
+                // Acquire PowerManager wake lock with ACQUIRE_CAUSES_WAKEUP to turn screen on.
+                // Activity launch is handled by ScreenWakeHelper.wakeToApp() via full-screen notification.
                 val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
                 @Suppress("DEPRECATION")
                 val wakeLock = pm.newWakeLock(
@@ -190,19 +175,12 @@ class ScreenScheduleManager(private val context: Context) {
                 )
                 wakeLock.acquire(10_000L)
 
-                // Method 2: Also bring MainActivity to foreground with screen-on flags
-                val activityIntent = Intent(context, MainActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                    putExtra("wake_screen", true)
-                }
-                context.startActivity(activityIntent)
-
                 // Release wake lock after short delay
                 Handler(Looper.getMainLooper()).postDelayed({
                     if (wakeLock.isHeld) wakeLock.release()
                 }, 5_000L)
 
-                Log.i(TAG, "Screen woken up")
+                Log.i(TAG, "Screen woken up (WakeLock acquired)")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to wake screen: ${e.message}")
             }

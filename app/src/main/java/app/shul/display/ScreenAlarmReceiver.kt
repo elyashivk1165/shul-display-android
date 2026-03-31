@@ -65,29 +65,14 @@ class ScreenAlarmReceiver : BroadcastReceiver() {
     }
 
     private fun handleScreenOn(context: Context) {
-        // Method 1: Direct startActivity — BroadcastReceivers triggered by setAlarmClock()
-        // are granted a special background-activity-launch exception on Android 10+.
-        try {
-            val activityIntent = Intent(context, MainActivity::class.java).apply {
-                addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK or
-                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP
-                )
-                putExtra("wake_screen", true)
-            }
-            context.startActivity(activityIntent)
-            Log.i(TAG, "SCREEN_ON: started MainActivity directly")
-        } catch (e: Exception) {
-            Log.w(TAG, "SCREEN_ON: direct startActivity failed: ${e.message}")
-        }
-
-        // Method 2: Full-screen notification (backup — also wakes screen via CATEGORY_ALARM)
+        // Primary path: full-screen notification with CATEGORY_ALARM privilege.
+        // This bypasses background activity launch restrictions on Android 10+.
         ScreenWakeHelper.wakeToApp(context)
 
-        // Method 3: Belt-and-suspenders — explicitly wake screen via ScreenScheduleManager
-        ScreenScheduleManager.wakeScreen(context)
+        // Acquire WakeLock via ScreenScheduleManager (without redundant startActivity).
         // WakeLock stays acquired — released in MainActivity.applyWakeScreenFlags()
+        ScreenScheduleManager.wakeScreen(context)
+        Log.i(TAG, "SCREEN_ON: wakeToApp + wakeScreen called (single activity launch path)")
     }
 
     private fun handleScreenOff(context: Context) {

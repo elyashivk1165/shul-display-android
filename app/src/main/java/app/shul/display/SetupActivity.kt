@@ -42,6 +42,7 @@ class SetupActivity : AppCompatActivity() {
         private const val REQUEST_ACCESSIBILITY_SETTINGS = 1004
         private const val REQUEST_EXACT_ALARM = 1005
         private const val REQUEST_TURN_SCREEN_ON = 1006
+        private const val REQUEST_NOTIFICATIONS = 1007
 
         /** True while SetupActivity is in the foreground — prevents accessibility
          *  service from auto-launching MainActivity over the setup flow. */
@@ -81,6 +82,11 @@ class SetupActivity : AppCompatActivity() {
             findViewById<Button>(R.id.turnScreenOnButton).setOnClickListener { requestTurnScreenOnPermission() }
             findViewById<Button>(R.id.accessibilityButton).setOnClickListener {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }
+            findViewById<Button>(R.id.notificationsButton).setOnClickListener {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+                }
             }
             findViewById<Button>(R.id.hdmiCecButton).setOnClickListener { openHdmiCecSettings() }
         }
@@ -132,12 +138,28 @@ class SetupActivity : AppCompatActivity() {
     }
 
     private fun hasTurnScreenOnPermission(): Boolean {
-        // TURN_SCREEN_ON was added in API 33; on older versions it's granted implicitly
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            return checkSelfPermission("android.permission.TURN_SCREEN_ON") ==
-                    android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return true
+        return try {
+            val appOps = getSystemService(android.app.AppOpsManager::class.java) ?: return false
+            val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                appOps.unsafeCheckOpNoThrow(
+                    "android:turn_screen_on",
+                    android.os.Process.myUid(),
+                    packageName
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                appOps.checkOpNoThrow(
+                    "android:turn_screen_on",
+                    android.os.Process.myUid(),
+                    packageName
+                )
+            }
+            mode == android.app.AppOpsManager.MODE_ALLOWED
+        } catch (e: Exception) {
+            Log.w(TAG, "hasTurnScreenOnPermission check failed: ${e.message}")
+            false
         }
-        return true
     }
 
     private fun refreshAllPermissionStatus() {
@@ -168,6 +190,18 @@ class SetupActivity : AppCompatActivity() {
             granted = ShulAccessibilityService.isEnabled(this),
             descGranted = "✓ שירות פעיל",
             descNeeded = "נדרש להפעלה אוטומטית לאחר הדלקת המכשיר"
+        )
+        val notificationsGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+        setPermissionRow(
+            button = findViewById(R.id.notificationsButton),
+            status = findViewById(R.id.notificationsStatus),
+            granted = notificationsGranted,
+            descGranted = "✓ הרשאה ניתנה",
+            descNeeded = "נדרשת לקבלת התראות עדכונים"
         )
     }
 
@@ -332,14 +366,14 @@ class SetupActivity : AppCompatActivity() {
 
     private fun requestAccessibilityService() {
         if (fromSettings) {
-            requestDefaultLauncher()
+            requestNotificationsPermission()
             return
         }
 
         // Already enabled — skip dialog
         if (ShulAccessibilityService.isEnabled(this)) {
             Log.d(TAG, "Accessibility service already enabled")
-            requestDefaultLauncher()
+            requestNotificationsPermission()
             return
         }
 
@@ -360,10 +394,28 @@ class SetupActivity : AppCompatActivity() {
                 )
             }
             .setNegativeButton("דלג") { _, _ ->
-                requestDefaultLauncher()
+                requestNotificationsPermission()
             }
             .setCancelable(false)
             .show()
+    }
+
+    private fun requestNotificationsPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+                return
+            }
+        }
+        requestDefaultLauncher()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_NOTIFICATIONS) {
+            if (fromSettings) refreshAllPermissionStatus()
+            else requestDefaultLauncher()
+        }
     }
 
     private fun requestDefaultLauncher() {
@@ -475,7 +527,7 @@ class SetupActivity : AppCompatActivity() {
                 if (fromSettings) refreshAllPermissionStatus() else requestAccessibilityService()
             }
             REQUEST_ACCESSIBILITY_SETTINGS -> {
-                if (fromSettings) refreshAllPermissionStatus() else requestDefaultLauncher()
+                if (fromSettings) refreshAllPermissionStatus() else requestNotificationsPermission()
             }
             REQUEST_ROLE_HOME, REQUEST_HOME_SETTINGS -> {
                 launchMainActivity()

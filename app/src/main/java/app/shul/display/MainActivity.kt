@@ -242,7 +242,8 @@ class MainActivity : AppCompatActivity() {
                             webView.loadUrl("$BASE_URL$encodedSlug")
                         }
                     }
-                    lastSuccessfulLoad = System.currentTimeMillis()
+                    // Do NOT reset lastSuccessfulLoad here — only onPageFinished sets it.
+                    // Resetting here would mask repeated failures and defeat the watchdog.
                 }
             }
         }
