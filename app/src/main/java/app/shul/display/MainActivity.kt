@@ -60,12 +60,18 @@ class MainActivity : AppCompatActivity() {
         private var instanceRef: WeakReference<MainActivity>? = null
         val instance: MainActivity? get() = instanceRef?.get()?.takeIf { !it.isDestroyed && !it.isFinishing }
         private const val REQUEST_ROLE_HOME = 1001
+
+        /** True while MainActivity is in the foreground (between onResume and onPause). */
+        @Volatile var isForeground = false
+        /** True while MainActivity exists (between onCreate and onDestroy). */
+        @Volatile var isAlive = false
     }
 
     @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         instanceRef = WeakReference(this)
+        isAlive = true
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setTurnScreenOn(true)
@@ -642,6 +648,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        isForeground = false
         longPressHandler.removeCallbacks(openSettingsRunnable)
         if (::webView.isInitialized) {
             webView.onPause()
@@ -651,6 +658,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        isForeground = true
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setTurnScreenOn(true)
             setShowWhenLocked(true)
@@ -670,6 +678,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        isForeground = false
+        isAlive = false
         longPressHandler.removeCallbacks(openSettingsRunnable)
         instanceRef = null
         if (::webView.isInitialized) webView.destroy()

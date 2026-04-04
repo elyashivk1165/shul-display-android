@@ -44,6 +44,7 @@ class DisplayForegroundService : Service() {
 
     // Track heartbeat job so we never launch duplicates on START_STICKY restarts
     private var heartbeatJob: Job? = null
+    private var recoveryJob: Job? = null
     private var realtimeListener: RealtimeCommandListener? = null
     private var screenReceiverRegistered = false
 
@@ -79,6 +80,9 @@ class DisplayForegroundService : Service() {
         }
         if (realtimeListener == null) {
             startRealtimeListener()
+        }
+        if (recoveryJob?.isActive != true) {
+            recoveryJob = startBackgroundRecovery()
         }
 
         try {
@@ -131,6 +135,7 @@ class DisplayForegroundService : Service() {
                 try {
                     val info = DeviceUtils.getFullDeviceInfo(applicationContext)
                     info.put("realtime_connected", realtimeListener?.isConnected() == true)
+                    info.put("is_foreground", MainActivity.isForeground)
                     SupabaseClient.updateLastSeen(deviceId, info)
                     backoff.reset()
                 } catch (e: Exception) {
@@ -139,6 +144,31 @@ class DisplayForegroundService : Service() {
                     continue
                 }
                 delay(60_000)
+            }
+        }
+    }
+
+    /** Background recovery: if MainActivity is alive but not in foreground, bring it back. */
+    private fun startBackgroundRecovery(): Job {
+        return serviceScope.launch(exceptionHandler) {
+            delay(10_000) // wait for startup to settle
+            while (isActive) {
+                delay(8_000)
+                if (MainActivity.isAlive && !MainActivity.isForeground) {
+                    Log.w(TAG, "BackgroundRecovery: MainActivity went to background — bringing to front")
+                    try {
+                        val intent = Intent(applicationContext, MainActivity::class.java).apply {
+                            addFlags(
+                                Intent.FLAG_ACTIVITY_NEW_TASK or
+                                Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                                Intent.FLAG_ACTIVITY_SINGLE_TOP
+                            )
+                        }
+                        startActivity(intent)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "BackgroundRecovery: could not bring to front: ${e.message}")
+                    }
+                }
             }
         }
     }
@@ -335,6 +365,7 @@ class DisplayForegroundService : Service() {
 
     override fun onDestroy() {
         heartbeatJob?.cancel()
+        recoveryJob?.cancel()
         realtimeListener?.stop()
         realtimeListener = null
         try { unregisterReceiver(screenOnReceiver) } catch (e: Exception) { }
