@@ -33,6 +33,14 @@ class DisplayForegroundService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val exceptionHandler = CoroutineExceptionHandler { _, e ->
         Log.e(TAG, "Coroutine exception", e)
+        // Attempt to restart critical services after failure
+        try {
+            if (heartbeatJob?.isActive != true) {
+                heartbeatJob = startHeartbeat()
+            }
+        } catch (restart: Exception) {
+            Log.e(TAG, "Failed to restart after exception: ${restart.message}")
+        }
     }
 
     // Deduplication set to prevent the same command executing twice (catch-up + realtime race)

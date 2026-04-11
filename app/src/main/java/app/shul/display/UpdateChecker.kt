@@ -32,9 +32,10 @@ object UpdateChecker {
     /** Returns ReleaseInfo if a newer version is available, null otherwise. */
     suspend fun checkForUpdate(currentVersion: String): ReleaseInfo? {
         return withContext(Dispatchers.IO) {
+            var conn: HttpURLConnection? = null
             try {
                 val url = URL("https://api.github.com/repos/$REPO/releases/latest")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                conn = (url.openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
                     connectTimeout = 10_000
                     readTimeout = 10_000
@@ -43,12 +44,10 @@ object UpdateChecker {
 
                 if (conn.responseCode != HttpURLConnection.HTTP_OK) {
                     Log.w(TAG, "GitHub API returned ${conn.responseCode}")
-                    conn.disconnect()
                     return@withContext null
                 }
 
                 val json = conn.inputStream.bufferedReader().use(BufferedReader::readText)
-                conn.disconnect()
 
                 val release = JSONObject(json)
                 val latestVersion = release.getString("tag_name").trimStart('v')
@@ -78,6 +77,8 @@ object UpdateChecker {
             } catch (e: Exception) {
                 Log.e(TAG, "checkForUpdate failed", e)
                 null
+            } finally {
+                conn?.disconnect()
             }
         }
     }
@@ -94,7 +95,9 @@ object UpdateChecker {
         try {
             onStatus("מוריד גרסה ${info.version}...")
 
-            val apkFile = File(context.cacheDir, "update.apk")
+            val cacheDir = context.cacheDir
+            if (!cacheDir.exists()) cacheDir.mkdirs()
+            val apkFile = File(cacheDir, "update.apk")
             if (apkFile.exists()) apkFile.delete()
 
             // Follow redirects (GitHub releases redirect to CDN)

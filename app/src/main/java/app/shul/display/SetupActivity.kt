@@ -43,6 +43,7 @@ class SetupActivity : AppCompatActivity() {
         private const val REQUEST_EXACT_ALARM = 1005
         private const val REQUEST_TURN_SCREEN_ON = 1006
         private const val REQUEST_NOTIFICATIONS = 1007
+        private val SLUG_REGEX = Regex("^[a-zA-Z0-9_-]{1,50}$")
 
         /** True while SetupActivity is in the foreground — prevents accessibility
          *  service from auto-launching MainActivity over the setup flow. */
@@ -131,8 +132,13 @@ class SetupActivity : AppCompatActivity() {
 
     private fun canScheduleExactAlarms(): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            return am.canScheduleExactAlarms()
+            return try {
+                val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                am.canScheduleExactAlarms()
+            } catch (e: Exception) {
+                Log.w(TAG, "canScheduleExactAlarms check failed: ${e.message}")
+                false
+            }
         }
         return true
     }
@@ -530,7 +536,7 @@ class SetupActivity : AppCompatActivity() {
     }
 
     private fun isValidSlug(slug: String): Boolean {
-        return slug.isNotBlank() && slug.matches(Regex("^[a-zA-Z0-9_-]{1,50}$"))
+        return slug.isNotBlank() && slug.matches(SLUG_REGEX)
     }
 
     private fun scheduleCommandPoller() {

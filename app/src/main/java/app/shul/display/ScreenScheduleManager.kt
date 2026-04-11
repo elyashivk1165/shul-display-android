@@ -72,7 +72,7 @@ class ScreenScheduleManager(private val context: Context) {
             // On Android 12+ setAlarmClock requires SCHEDULE_EXACT_ALARM permission.
             // Check at runtime; fall back to setAndAllowWhileIdle if not granted.
             val canExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                alarmManager.canScheduleExactAlarms()
+                try { alarmManager.canScheduleExactAlarms() } catch (_: Exception) { false }
             } else {
                 true
             }
