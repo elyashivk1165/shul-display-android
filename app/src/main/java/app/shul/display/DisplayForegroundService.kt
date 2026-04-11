@@ -12,7 +12,6 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import kotlinx.coroutines.*
-import java.util.Collections
 
 class DisplayForegroundService : Service() {
 
@@ -37,9 +36,8 @@ class DisplayForegroundService : Service() {
     }
 
     // Deduplication set to prevent the same command executing twice (catch-up + realtime race)
-    private val executedCommandIds = Collections.synchronizedSet(
-        LinkedHashSet<String>()
-    )
+    private val executedCommandIds = LinkedHashSet<String>()
+    private val commandIdsLock = Any()
     private val MAX_EXECUTED_IDS = 100
 
     // Track heartbeat job so we never launch duplicates on START_STICKY restarts
@@ -75,14 +73,18 @@ class DisplayForegroundService : Service() {
         startForeground(NOTIFICATION_ID, buildNotification())
 
         // Guard: don't launch duplicate coroutines on START_STICKY restarts
-        if (heartbeatJob?.isActive != true) {
-            heartbeatJob = startHeartbeat()
-        }
-        if (realtimeListener == null) {
-            startRealtimeListener()
-        }
-        if (recoveryJob?.isActive != true) {
-            recoveryJob = startBackgroundRecovery()
+        synchronized(this) {
+            if (heartbeatJob?.isActive != true) {
+                heartbeatJob = startHeartbeat()
+            }
+            if (realtimeListener == null || realtimeListener?.isConnected() != true) {
+                realtimeListener?.stop()
+                realtimeListener = null
+                startRealtimeListener()
+            }
+            if (recoveryJob?.isActive != true) {
+                recoveryJob = startBackgroundRecovery()
+            }
         }
 
         try {
@@ -186,13 +188,14 @@ class DisplayForegroundService : Service() {
             onCommand = { cmd ->
                 serviceScope.launch(exceptionHandler) {
                     // Skip duplicate commands already handled via catch-up path
-                    if (!executedCommandIds.add(cmd.id)) {
-                        Log.w(TAG, "Skipping duplicate command ${cmd.id} (already executed)")
-                        return@launch
-                    }
-                    if (executedCommandIds.size > MAX_EXECUTED_IDS) {
-                        val oldest = executedCommandIds.first()
-                        executedCommandIds.remove(oldest)
+                    synchronized(commandIdsLock) {
+                        if (!executedCommandIds.add(cmd.id)) {
+                            Log.w(TAG, "Skipping duplicate command ${cmd.id} (already executed)")
+                            return@launch
+                        }
+                        if (executedCommandIds.size > MAX_EXECUTED_IDS) {
+                            executedCommandIds.remove(executedCommandIds.first())
+                        }
                     }
                     try {
                         executeCommand(cmd)
@@ -209,11 +212,14 @@ class DisplayForegroundService : Service() {
                 // Catch-up: fetch any commands missed while disconnected
                 val pending = SupabaseClient.getPendingCommands(deviceId)
                 pending.forEach { cmd ->
-                    if (executedCommandIds.add(cmd.id)) {
-                        if (executedCommandIds.size > MAX_EXECUTED_IDS) {
-                            val oldest = executedCommandIds.first()
-                            executedCommandIds.remove(oldest)
+                    val isNew = synchronized(commandIdsLock) {
+                        val added = executedCommandIds.add(cmd.id)
+                        if (added && executedCommandIds.size > MAX_EXECUTED_IDS) {
+                            executedCommandIds.remove(executedCommandIds.first())
                         }
+                        added
+                    }
+                    if (isNew) {
                         try {
                             executeCommand(cmd)
                         } catch (e: Exception) {

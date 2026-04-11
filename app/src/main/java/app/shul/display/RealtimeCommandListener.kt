@@ -39,8 +39,12 @@ class RealtimeCommandListener(
     fun stop() {
         heartbeatJob?.cancel()
         webSocket?.close(1000, "Service stopped")
+        webSocket = null
         scope.cancel()
-        client.dispatcher.executorService.shutdown()
+        try {
+            client.dispatcher.executorService.shutdown()
+            client.dispatcher.executorService.awaitTermination(3, TimeUnit.SECONDS)
+        } catch (_: InterruptedException) { }
         client.connectionPool.evictAll()
     }
 
@@ -81,7 +85,9 @@ class RealtimeCommandListener(
             override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "WebSocket failure: ${t.message}")
                 isConnected.set(false)
-                scheduleReconnect()
+                try { scheduleReconnect() } catch (e: Exception) {
+                    Log.e(TAG, "Failed to schedule reconnect: ${e.message}")
+                }
             }
 
             override fun onClosed(ws: WebSocket, code: Int, reason: String) {

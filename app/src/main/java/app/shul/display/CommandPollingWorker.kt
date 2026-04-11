@@ -20,6 +20,18 @@ class CommandPollingWorker(
         // so we always call start() directly — START_STICKY handles duplicate starts gracefully.
         Log.d(TAG, "Ensuring DisplayForegroundService is running...")
         DisplayForegroundService.start(applicationContext)
+
+        // Fallback polling: fetch pending commands in case realtime is disconnected
+        try {
+            val deviceId = DeviceUtils.getDeviceId(applicationContext)
+            val pending = SupabaseClient.getPendingCommands(deviceId)
+            if (pending.isNotEmpty()) {
+                Log.i(TAG, "Fallback poll found ${pending.size} pending commands")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Fallback command poll failed: ${e.message}")
+        }
+
         return Result.success()
     }
 }

@@ -47,7 +47,12 @@ class ScreenAlarmReceiver : BroadcastReceiver() {
             when (action) {
                 "app.shul.display.SCREEN_ON" -> {
                     Log.i(TAG, "Schedule: turning screen ON (rc=$requestCode)")
-                    handleScreenOn(context)
+                    try {
+                        handleScreenOn(context)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error handling SCREEN_ON: ${e.message}")
+                        releaseWakeLock()
+                    }
                 }
                 "app.shul.display.SCREEN_OFF" -> {
                     Log.i(TAG, "Schedule: turning screen OFF (rc=$requestCode)")
