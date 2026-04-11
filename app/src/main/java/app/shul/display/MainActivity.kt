@@ -181,15 +181,23 @@ class MainActivity : AppCompatActivity() {
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
                 if (isDestroyed || isFinishing) return true
                 Log.e(TAG, "WebView renderer gone, recreating...")
+                val container = findViewById<android.widget.FrameLayout>(R.id.webViewContainer)
                 try {
                     view.webViewClient = WebViewClient()
                     view.webChromeClient = WebChromeClient()
-                    val container = findViewById<android.widget.FrameLayout>(R.id.webViewContainer)
                     container?.removeView(view)
                     view.destroy()
                 } catch (e: Exception) {
                     Log.e(TAG, "Error cleaning up crashed WebView: ${e.message}")
                 }
+                // Create a fresh WebView and add it to the container
+                webView = WebView(this@MainActivity)
+                webView.layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                webView.setBackgroundColor(android.graphics.Color.BLACK)
+                container?.addView(webView)
                 setupWebView()
                 loadUrl()
                 return true
