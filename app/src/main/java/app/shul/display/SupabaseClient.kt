@@ -229,6 +229,42 @@ object SupabaseClient {
         }
     }
 
+    // ── Device logging ─────────────────────────────────────────────────────
+
+    /**
+     * Send a log entry to the device_logs table for remote monitoring.
+     * Levels: INFO, WARN, ERROR, CRASH, PING
+     */
+    suspend fun sendLog(
+        deviceId: String,
+        level: String,
+        message: String,
+        stacktrace: String? = null,
+        extra: JSONObject? = null,
+        appVersion: String? = null
+    ) {
+        withContext(Dispatchers.IO) {
+            try {
+                val body = JSONObject().apply {
+                    put("device_id", deviceId)
+                    put("level", level)
+                    put("message", message)
+                    if (stacktrace != null) put("stacktrace", stacktrace)
+                    if (extra != null) put("extra", extra)
+                    if (appVersion != null) put("app_version", appVersion)
+                }
+                executeRequest(
+                    url = "$SUPABASE_URL/rest/v1/device_logs",
+                    method = "POST",
+                    body = body.toString(),
+                    retries = 1 // Don't retry too aggressively for logs
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "sendLog failed: ${e.message}")
+            }
+        }
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private fun parseCommands(json: String): List<DeviceCommand> {

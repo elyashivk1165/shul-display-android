@@ -186,10 +186,14 @@ class MainActivity : AppCompatActivity() {
                 lifecycleScope.launch(Dispatchers.IO) {
                     try {
                         val deviceId = DeviceUtils.getDeviceId(applicationContext)
+                        val appVersion = DeviceUtils.getAppVersion(applicationContext)
                         val info = DeviceUtils.getFullDeviceInfo(applicationContext)
                         info.put("event", "webview_renderer_crash")
                         info.put("did_render_crash_kill", detail.didCrash())
                         SupabaseClient.updateLastSeen(deviceId, info)
+                        SupabaseClient.sendLog(deviceId, "ERROR",
+                            "WebView renderer crashed (didCrash=${detail.didCrash()}), recreating...",
+                            appVersion = appVersion)
                     } catch (_: Exception) { }
                 }
                 val container = findViewById<android.widget.FrameLayout>(R.id.webViewContainer)

@@ -207,6 +207,14 @@ class DisplayForegroundService : Service() {
         )
         realtimeListener?.start()
         Log.d(TAG, "Realtime listener started")
+
+        // Log service start for remote monitoring
+        serviceScope.launch {
+            val appVersion = DeviceUtils.getAppVersion(applicationContext)
+            SupabaseClient.sendLog(deviceId, "INFO",
+                "Service started, realtime connecting...",
+                appVersion = appVersion)
+        }
     }
 
     /**
@@ -229,18 +237,29 @@ class DisplayForegroundService : Service() {
         SupabaseClient.acknowledgeCommand(cmd.id)
 
         // 3. Execute and report result
+        val deviceId = DeviceUtils.getDeviceId(applicationContext)
+        val appVersion = DeviceUtils.getAppVersion(applicationContext)
         try {
             executeCommand(cmd)
             // Only report success if executeCommand didn't already report a specific result
             if (cmd.command !in listOf("SCREEN_OFF", "SCREEN_ON", "RESTART_APP")) {
                 SupabaseClient.reportCommandResult(cmd.id, "success")
             }
+            // Log successful command execution
+            SupabaseClient.sendLog(deviceId, "INFO",
+                "Command executed: ${cmd.command} (source=$source)",
+                appVersion = appVersion)
         } catch (e: Exception) {
             Log.e(TAG, "$source: failed to execute command ${cmd.command}", e)
             SupabaseClient.reportCommandResult(
                 cmd.id, "error",
                 e.message?.take(500) ?: "Unknown error"
             )
+            // Log failed command
+            SupabaseClient.sendLog(deviceId, "ERROR",
+                "Command failed: ${cmd.command} — ${e.message}",
+                stacktrace = e.stackTraceToString().take(2000),
+                appVersion = appVersion)
         }
 
         // 4. Send immediate heartbeat so admin sees updated device state
