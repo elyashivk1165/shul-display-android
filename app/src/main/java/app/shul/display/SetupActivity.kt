@@ -146,7 +146,7 @@ class SetupActivity : AppCompatActivity() {
     private fun hasTurnScreenOnPermission(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return true
         return try {
-            val appOps = getSystemService(android.app.AppOpsManager::class.java) ?: return false
+            val appOps = getSystemService(android.app.AppOpsManager::class.java) ?: return true
             val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 appOps.unsafeCheckOpNoThrow(
                     "android:turn_screen_on",
@@ -161,10 +161,14 @@ class SetupActivity : AppCompatActivity() {
                     packageName
                 )
             }
-            mode == android.app.AppOpsManager.MODE_ALLOWED
+            // MODE_ALLOWED or MODE_DEFAULT both mean the permission is effectively granted
+            mode == android.app.AppOpsManager.MODE_ALLOWED ||
+                mode == android.app.AppOpsManager.MODE_DEFAULT
         } catch (e: Exception) {
-            Log.w(TAG, "hasTurnScreenOnPermission check failed: ${e.message}")
-            false
+            // On devices where this app-op doesn't exist (many TV boxes),
+            // assume permission is granted since it's declared in manifest
+            Log.w(TAG, "hasTurnScreenOnPermission check failed, assuming granted: ${e.message}")
+            true
         }
     }
 
@@ -251,19 +255,30 @@ class SetupActivity : AppCompatActivity() {
 
     private fun requestTurnScreenOnPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Note: "android.settings.TURN_SCREEN_ON_SETTINGS" renders as a black screen
-            // on some Android TV boxes — skip it and open app details directly.
-            try {
-                @Suppress("DEPRECATION")
-                startActivityForResult(
-                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                        Uri.parse("package:$packageName")),
-                    REQUEST_TURN_SCREEN_ON
-                )
-                Toast.makeText(this, "הגדרות → הרשאות → הפעלת המסך → אפשר", Toast.LENGTH_LONG).show()
-            } catch (e: Exception) {
-                Toast.makeText(this, "פתח הגדרות > אפליקציות > shul-display > הרשאות > הפעלת המסך", Toast.LENGTH_LONG).show()
+            // Many Android TV boxes render system settings pages as a black screen.
+            // Try multiple approaches in order of reliability:
+            val intents = listOf(
+                // 1. Direct app permission settings (most specific, but often black on TV)
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")),
+                // 2. General app settings list
+                Intent(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS),
+                // 3. Main settings screen as last resort
+                Intent(Settings.ACTION_SETTINGS)
+            )
+            for (intent in intents) {
+                try {
+                    // Verify the intent resolves before launching
+                    if (intent.resolveActivity(packageManager) != null) {
+                        @Suppress("DEPRECATION")
+                        startActivityForResult(intent, REQUEST_TURN_SCREEN_ON)
+                        Toast.makeText(this, "הגדרות → אפליקציות → shul-display → הרשאות → הפעלת המסך → אפשר", Toast.LENGTH_LONG).show()
+                        return
+                    }
+                } catch (_: Exception) { continue }
             }
+            // All intents failed — grant may not be possible on this device, skip
+            Toast.makeText(this, "לא ניתן לפתוח הגדרות במכשיר זה. הרשאה עשויה להיות פעילה אוטומטית.", Toast.LENGTH_LONG).show()
+            if (fromSettings) refreshAllPermissionStatus()
         } else {
             Toast.makeText(this, "הרשאה ניתנת אוטומטית במכשיר זה", Toast.LENGTH_SHORT).show()
         }
@@ -323,15 +338,7 @@ class SetupActivity : AppCompatActivity() {
                 .setTitle("הפעלת המסך")
                 .setMessage("כדי שהמסך יידלק אוטומטית, יש לאפשר הרשאת \"הפעלת המסך\".\n\nבדף שייפתח:\nלחץ על «הרשאות» ← אפשר «הפעלת המסך»")
                 .setPositiveButton("אישור") { _, _ ->
-                    try {
-                        // Open app details — TURN_SCREEN_ON_SETTINGS shows black screen on some boxes
-                        @Suppress("DEPRECATION")
-                        startActivityForResult(
-                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                Uri.parse("package:$packageName")),
-                            REQUEST_TURN_SCREEN_ON
-                        )
-                    } catch (e: Exception) { requestAccessibilityService() }
+                    requestTurnScreenOnPermission()
                 }
                 .setNegativeButton("דלג") { _, _ -> requestAccessibilityService() }
                 .show()
