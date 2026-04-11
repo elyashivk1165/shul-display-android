@@ -74,9 +74,32 @@ class SetupActivity : AppCompatActivity() {
             slugInput.selectAll()
         }
 
-        // Permissions section — shown only in settings mode
+        // Settings mode: show permissions, device info, back button
         val permissionsSection = findViewById<View>(R.id.permissionsSection)
+        val deviceInfoSection = findViewById<View>(R.id.deviceInfoSection)
+        val backToDisplayButton = findViewById<Button>(R.id.backToDisplayButton)
+        val titleText = findViewById<TextView>(R.id.titleText)
+        val subtitleText = findViewById<TextView>(R.id.subtitleText)
+
         if (fromSettings) {
+            // Update title for settings mode
+            titleText.text = "הגדרות מסך"
+            subtitleText.text = "ניהול הגדרות, הרשאות ומידע על המכשיר"
+            saveButton.text = "שמור שינויים"
+
+            // Show device info in left panel
+            deviceInfoSection.visibility = View.VISIBLE
+            val deviceId = DeviceUtils.getDeviceId(this)
+            val appVersion = DeviceUtils.getAppVersion(this)
+            findViewById<TextView>(R.id.deviceIdText).text = "מזהה: ${deviceId.take(12)}..."
+            findViewById<TextView>(R.id.appVersionText).text = "גרסה: $appVersion"
+            findViewById<TextView>(R.id.currentSlugText).text = existingSlug ?: "לא מוגדר"
+
+            // Show back to display button
+            backToDisplayButton.visibility = View.VISIBLE
+            backToDisplayButton.setOnClickListener { launchMainActivity() }
+
+            // Show permissions section
             permissionsSection.visibility = View.VISIBLE
             refreshAllPermissionStatus()
             findViewById<Button>(R.id.overlayButton).setOnClickListener { requestOverlayPermission() }
@@ -254,11 +277,13 @@ class SetupActivity : AppCompatActivity() {
         if (granted) {
             status.text = descGranted
             status.setTextColor(0xFF22C55E.toInt())
+            button.text = "✓"
             button.isEnabled = false
-            button.alpha = 0.4f
+            button.alpha = 0.5f
         } else {
             status.text = descNeeded
-            status.setTextColor(0xFF64748B.toInt())
+            status.setTextColor(0xFFFBBF24.toInt()) // amber for needed
+            button.text = "אפשר"
             button.isEnabled = true
             button.alpha = 1f
         }

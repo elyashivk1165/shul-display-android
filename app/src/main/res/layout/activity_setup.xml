@@ -6,7 +6,7 @@
     android:background="#0F172A"
     android:padding="0dp">
 
-    <!-- Left panel: branding -->
+    <!-- Left panel: branding + device info -->
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="match_parent"
@@ -43,6 +43,51 @@
             android:gravity="center"
             android:layout_marginTop="8dp"/>
 
+        <!-- Device info section (shown in settings mode) -->
+        <LinearLayout
+            android:id="@+id/deviceInfoSection"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:layout_marginTop="32dp"
+            android:visibility="gone">
+
+            <View
+                android:layout_width="120dp"
+                android:layout_height="1dp"
+                android:background="#334155"
+                android:layout_marginBottom="16dp"/>
+
+            <TextView
+                android:id="@+id/deviceIdText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#64748B"
+                android:textSize="11sp"
+                android:gravity="center"
+                android:fontFamily="monospace"/>
+
+            <TextView
+                android:id="@+id/appVersionText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#64748B"
+                android:textSize="11sp"
+                android:gravity="center"
+                android:layout_marginTop="4dp"/>
+
+            <TextView
+                android:id="@+id/currentSlugText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#818CF8"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:layout_marginTop="8dp"/>
+        </LinearLayout>
+
     </LinearLayout>
 
     <!-- Right panel: form -->
@@ -64,6 +109,7 @@
             android:minHeight="400dp">
 
             <TextView
+                android:id="@+id/titleText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="&#x05D1;&#x05E8;&#x05D5;&#x05DB;&#x05D9;&#x05DD; &#x05D4;&#x05D1;&#x05D0;&#x05D9;&#x05DD;"
@@ -73,6 +119,7 @@
                 android:layout_marginBottom="8dp"/>
 
             <TextView
+                android:id="@+id/subtitleText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="&#x05D4;&#x05D6;&#x05DF; &#x05D0;&#x05EA; &#x05DB;&#x05EA;&#x05D5;&#x05D1;&#x05EA; &#x05D4;&#x05EA;&#x05E6;&#x05D5;&#x05D2;&#x05D4; &#x05DC;&#x05D4;&#x05EA;&#x05D7;&#x05DC;&#x05D4;"
@@ -129,6 +176,19 @@
                 android:focusable="true"
                 android:nextFocusUp="@id/slugInput"/>
 
+            <!-- Back to display button (shown in settings mode) -->
+            <Button
+                android:id="@+id/backToDisplayButton"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="12dp"
+                android:text="&#x2190; &#x05D7;&#x05D6;&#x05D5;&#x05E8; &#x05DC;&#x05EA;&#x05E6;&#x05D5;&#x05D2;&#x05D4;"
+                android:textColor="#94A3B8"
+                android:textSize="14sp"
+                android:background="@android:color/transparent"
+                android:stateListAnimator="@null"
+                android:visibility="gone"/>
+
             <!-- Permissions section — shown from settings screen -->
             <LinearLayout
                 android:id="@+id/permissionsSection"
@@ -156,7 +216,8 @@
 
                 <!-- Row: Overlay -->
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="14dp">
+                    android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="14dp"
+                    android:minHeight="48dp">
                     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
                             android:text="&#x05EA;&#x05E6;&#x05D5;&#x05D2;&#x05D4; &#x05DE;&#x05E2;&#x05DC; &#x05D0;&#x05E4;&#x05DC;&#x05D9;&#x05E7;&#x05E6;&#x05D9;&#x05D5;&#x05EA; &#x05D0;&#x05D7;&#x05E8;&#x05D5;&#x05EA;"
@@ -167,12 +228,14 @@
                     <Button android:id="@+id/overlayButton" android:layout_width="wrap_content" android:layout_height="40dp"
                         android:paddingStart="16dp" android:paddingEnd="16dp" android:text="&#x05D0;&#x05E4;&#x05E9;&#x05E8;"
                         android:textColor="#FFFFFF" android:textSize="14sp"
-                        android:background="@drawable/bg_button_primary" android:stateListAnimator="@null"/>
+                        android:background="@drawable/bg_button_primary" android:stateListAnimator="@null"
+                        android:focusable="true"/>
                 </LinearLayout>
 
                 <!-- Row: Exact alarm -->
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="14dp">
+                    android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="14dp"
+                    android:minHeight="48dp">
                     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
                             android:text="&#x05E9;&#x05E2;&#x05D5;&#x05DF; &#x05DE;&#x05E2;&#x05D5;&#x05E8;&#x05E8; &#x05D5;&#x05EA;&#x05D6;&#x05DB;&#x05D5;&#x05E8;&#x05D5;&#x05EA;"
@@ -183,12 +246,14 @@
                     <Button android:id="@+id/exactAlarmButton" android:layout_width="wrap_content" android:layout_height="40dp"
                         android:paddingStart="16dp" android:paddingEnd="16dp" android:text="&#x05D0;&#x05E4;&#x05E9;&#x05E8;"
                         android:textColor="#FFFFFF" android:textSize="14sp"
-                        android:background="@drawable/bg_button_primary" android:stateListAnimator="@null"/>
+                        android:background="@drawable/bg_button_primary" android:stateListAnimator="@null"
+                        android:focusable="true"/>
                 </LinearLayout>
 
                 <!-- Row: Turn screen on -->
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="14dp">
+                    android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="14dp"
+                    android:minHeight="48dp">
                     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
                             android:text="&#x05D4;&#x05E4;&#x05E2;&#x05DC;&#x05EA; &#x05D4;&#x05DE;&#x05E1;&#x05DA;"
@@ -199,12 +264,14 @@
                     <Button android:id="@+id/turnScreenOnButton" android:layout_width="wrap_content" android:layout_height="40dp"
                         android:paddingStart="16dp" android:paddingEnd="16dp" android:text="&#x05D0;&#x05E4;&#x05E9;&#x05E8;"
                         android:textColor="#FFFFFF" android:textSize="14sp"
-                        android:background="@drawable/bg_button_primary" android:stateListAnimator="@null"/>
+                        android:background="@drawable/bg_button_primary" android:stateListAnimator="@null"
+                        android:focusable="true"/>
                 </LinearLayout>
 
                 <!-- Row: Accessibility service -->
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="14dp">
+                    android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="14dp"
+                    android:minHeight="48dp">
                     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
                             android:text="&#x05E9;&#x05D9;&#x05E8;&#x05D5;&#x05EA; &#x05E0;&#x05D2;&#x05D9;&#x05E9;&#x05D5;&#x05EA;"
@@ -215,12 +282,14 @@
                     <Button android:id="@+id/accessibilityButton" android:layout_width="wrap_content" android:layout_height="40dp"
                         android:paddingStart="16dp" android:paddingEnd="16dp" android:text="&#x05D0;&#x05E4;&#x05E9;&#x05E8;"
                         android:textColor="#FFFFFF" android:textSize="14sp"
-                        android:background="@drawable/bg_button_primary" android:stateListAnimator="@null"/>
+                        android:background="@drawable/bg_button_primary" android:stateListAnimator="@null"
+                        android:focusable="true"/>
                 </LinearLayout>
 
                 <!-- Row: Post Notifications -->
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="14dp">
+                    android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="14dp"
+                    android:minHeight="48dp">
                     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
                             android:text="&#x05D4;&#x05EA;&#x05E8;&#x05D0;&#x05D5;&#x05EA; (&#x05E2;&#x05D3;&#x05DB;&#x05D5;&#x05E0;&#x05D9;&#x05DD;)"
@@ -231,14 +300,16 @@
                     <Button android:id="@+id/notificationsButton" android:layout_width="wrap_content" android:layout_height="40dp"
                         android:paddingStart="16dp" android:paddingEnd="16dp" android:text="&#x05D0;&#x05E4;&#x05E9;&#x05E8;"
                         android:textColor="#FFFFFF" android:textSize="14sp"
-                        android:background="@drawable/bg_button_primary" android:stateListAnimator="@null"/>
+                        android:background="@drawable/bg_button_primary" android:stateListAnimator="@null"
+                        android:focusable="true"/>
                 </LinearLayout>
 
                 <!-- Row: HDMI-CEC settings shortcut -->
                 <View android:layout_width="match_parent" android:layout_height="1dp"
                     android:background="#1E293B" android:layout_marginBottom="16dp"/>
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:orientation="horizontal" android:gravity="center_vertical">
+                    android:orientation="horizontal" android:gravity="center_vertical"
+                    android:minHeight="48dp">
                     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
                             android:text="&#x05D4;&#x05D2;&#x05D3;&#x05E8;&#x05D5;&#x05EA; HDMI-CEC"
@@ -250,7 +321,8 @@
                     <Button android:id="@+id/hdmiCecButton" android:layout_width="wrap_content" android:layout_height="40dp"
                         android:paddingStart="16dp" android:paddingEnd="16dp" android:text="&#x05E4;&#x05EA;&#x05D7;"
                         android:textColor="#FFFFFF" android:textSize="14sp"
-                        android:background="@drawable/bg_button_primary" android:stateListAnimator="@null"/>
+                        android:background="@drawable/bg_button_primary" android:stateListAnimator="@null"
+                        android:focusable="true"/>
                 </LinearLayout>
 
             </LinearLayout>
