@@ -153,7 +153,7 @@ class DisplayForegroundService : Service() {
                     delay(backoff.nextDelay())
                     continue
                 }
-                delay(60_000)
+                delay(300_000) // 5 minutes — reduces battery/data usage vs 60s
             }
         }
     }

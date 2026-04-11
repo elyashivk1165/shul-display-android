@@ -182,6 +182,16 @@ class MainActivity : AppCompatActivity() {
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
                 if (isDestroyed || isFinishing) return true
                 Log.e(TAG, "WebView renderer gone, recreating...")
+                // Report crash to Supabase for remote monitoring
+                lifecycleScope.launch(Dispatchers.IO) {
+                    try {
+                        val deviceId = DeviceUtils.getDeviceId(applicationContext)
+                        val info = DeviceUtils.getFullDeviceInfo(applicationContext)
+                        info.put("event", "webview_renderer_crash")
+                        info.put("did_render_crash_kill", detail.didCrash())
+                        SupabaseClient.updateLastSeen(deviceId, info)
+                    } catch (_: Exception) { }
+                }
                 val container = findViewById<android.widget.FrameLayout>(R.id.webViewContainer)
                 if (container == null) {
                     Log.e(TAG, "webViewContainer not found, cannot recover WebView")
