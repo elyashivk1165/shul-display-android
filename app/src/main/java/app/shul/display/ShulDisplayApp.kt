@@ -43,7 +43,9 @@ class ShulDisplayApp : Application() {
             handler.post {
                 try {
                     MainActivity.instance?.clearWebViewCache()
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    Log.w("ShulDisplayApp", "Failed to clear WebView cache on low memory: ${e.message}")
+                }
             }
         }
     }
@@ -85,7 +87,9 @@ class ShulDisplayApp : Application() {
                         conn.outputStream.bufferedWriter().use { it.write(body.toString()) }
                         conn.responseCode
                         conn.disconnect()
-                    } catch (_: Throwable) {}
+                    } catch (t: Throwable) {
+                        Log.w("ShulDisplayApp", "Failed to send crash report: ${t.message}")
+                    }
                 }
                 networkThread.isDaemon = true
                 networkThread.start()
@@ -128,7 +132,9 @@ class ShulDisplayApp : Application() {
                 // Clear after successful send
                 prefs.edit().remove("pending_crash_stack").remove("pending_crash_message")
                     .remove("pending_crash_time").remove("pending_crash_version").apply()
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                Log.w("ShulDisplayApp", "Failed to send pending crash: ${e.message}")
+            }
         }
     }
 }

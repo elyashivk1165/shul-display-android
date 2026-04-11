@@ -7,8 +7,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import java.util.Calendar
@@ -169,19 +167,15 @@ class ScreenScheduleManager(private val context: Context) {
                 val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
                 @Suppress("DEPRECATION")
                 val wakeLock = pm.newWakeLock(
-                    PowerManager.FULL_WAKE_LOCK or
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
                     PowerManager.ACQUIRE_CAUSES_WAKEUP or
                     PowerManager.ON_AFTER_RELEASE,
                     "ShulDisplay:WakeScreen"
                 )
-                wakeLock.acquire(10_000L)
+                // Acquire with auto-release timeout as safety net
+                wakeLock.acquire(5_000L)
 
-                // Release wake lock after short delay
-                Handler(Looper.getMainLooper()).postDelayed({
-                    if (wakeLock.isHeld) wakeLock.release()
-                }, 5_000L)
-
-                Log.i(TAG, "Screen woken up (WakeLock acquired)")
+                Log.i(TAG, "Screen woken up (WakeLock acquired, auto-releases in 5s)")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to wake screen: ${e.message}")
             }

@@ -182,10 +182,14 @@ class MainActivity : AppCompatActivity() {
                 if (isDestroyed || isFinishing) return true
                 Log.e(TAG, "WebView renderer gone, recreating...")
                 val container = findViewById<android.widget.FrameLayout>(R.id.webViewContainer)
+                if (container == null) {
+                    Log.e(TAG, "webViewContainer not found, cannot recover WebView")
+                    return true
+                }
                 try {
                     view.webViewClient = WebViewClient()
                     view.webChromeClient = WebChromeClient()
-                    container?.removeView(view)
+                    container.removeView(view)
                     view.destroy()
                 } catch (e: Exception) {
                     Log.e(TAG, "Error cleaning up crashed WebView: ${e.message}")
@@ -197,7 +201,7 @@ class MainActivity : AppCompatActivity() {
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
                 webView.setBackgroundColor(android.graphics.Color.BLACK)
-                container?.addView(webView)
+                container.addView(webView)
                 setupWebView()
                 loadUrl()
                 return true
@@ -245,9 +249,9 @@ class MainActivity : AppCompatActivity() {
     private fun startWebViewWatchdog() {
         lifecycleScope.launch {
             while (isActive) {
-                delay(60_000)
+                delay(90_000) // Check every 90s (was 60s) to reduce overhead
                 val elapsed = System.currentTimeMillis() - lastSuccessfulLoad
-                if (elapsed > 5 * 60_000L) {
+                if (elapsed > 7 * 60_000L) { // 7 min (was 5 min) to avoid reloading slow pages
                     Log.w(TAG, "WebView watchdog: no successful load in ${elapsed/1000}s, force reloading")
                     withContext(Dispatchers.Main) {
                         if (!isDestroyed && !isFinishing && ::webView.isInitialized) {

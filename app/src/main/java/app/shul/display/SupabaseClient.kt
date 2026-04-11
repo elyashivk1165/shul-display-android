@@ -33,6 +33,7 @@ object SupabaseClient {
 
     suspend fun registerDevice(deviceId: String, slug: String, appVersion: String) {
         withContext(Dispatchers.IO) {
+            var conn: HttpURLConnection? = null
             try {
                 val body = JSONObject().apply {
                     put("device_id", deviceId)
@@ -41,7 +42,7 @@ object SupabaseClient {
                 }
 
                 val url = URL("$SUPABASE_URL/rest/v1/devices")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                conn = (url.openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
                     doOutput = true
                     connectTimeout = 10_000
@@ -53,15 +54,17 @@ object SupabaseClient {
                 conn.outputStream.bufferedWriter().use { it.write(body.toString()) }
                 val code = conn.responseCode
                 Log.d(TAG, "registerDevice response: $code")
-                conn.disconnect()
             } catch (e: Exception) {
                 Log.e(TAG, "registerDevice failed", e)
+            } finally {
+                conn?.disconnect()
             }
         }
     }
 
     suspend fun updateLastSeen(deviceId: String, deviceInfo: JSONObject? = null) {
         withContext(Dispatchers.IO) {
+            var conn: HttpURLConnection? = null
             try {
                 val body = JSONObject().apply {
                     put("last_seen", nowIso())
@@ -71,7 +74,7 @@ object SupabaseClient {
                 }
 
                 val url = URL("$SUPABASE_URL/rest/v1/devices?device_id=eq.$deviceId")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                conn = (url.openConnection() as HttpURLConnection).apply {
                     requestMethod = "PATCH"
                     doOutput = true
                     connectTimeout = 10_000
@@ -82,9 +85,10 @@ object SupabaseClient {
                 conn.outputStream.bufferedWriter().use { it.write(body.toString()) }
                 val code = conn.responseCode
                 Log.d(TAG, "updateLastSeen response: $code")
-                conn.disconnect()
             } catch (e: Exception) {
                 Log.e(TAG, "updateLastSeen failed", e)
+            } finally {
+                conn?.disconnect()
             }
         }
     }
@@ -142,6 +146,7 @@ object SupabaseClient {
      */
     suspend fun reportCommandResult(commandId: String, result: String, message: String = "") {
         withContext(Dispatchers.IO) {
+            var conn: HttpURLConnection? = null
             try {
                 val body = JSONObject().apply {
                     put("executed_at", nowIso())
@@ -150,7 +155,7 @@ object SupabaseClient {
                 }
 
                 val url = URL("$SUPABASE_URL/rest/v1/device_commands?id=eq.$commandId")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                conn = (url.openConnection() as HttpURLConnection).apply {
                     requestMethod = "PATCH"
                     doOutput = true
                     connectTimeout = 10_000
@@ -161,22 +166,24 @@ object SupabaseClient {
                 conn.outputStream.bufferedWriter().use { it.write(body.toString()) }
                 val code = conn.responseCode
                 Log.d(TAG, "reportCommandResult response: $code")
-                conn.disconnect()
             } catch (e: Exception) {
                 Log.e(TAG, "reportCommandResult failed", e)
+            } finally {
+                conn?.disconnect()
             }
         }
     }
 
     suspend fun updateDeviceSlug(deviceId: String, newSlug: String) {
         withContext(Dispatchers.IO) {
+            var conn: HttpURLConnection? = null
             try {
                 val body = JSONObject().apply {
                     put("slug", newSlug)
                 }
 
                 val url = URL("$SUPABASE_URL/rest/v1/devices?device_id=eq.$deviceId")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                conn = (url.openConnection() as HttpURLConnection).apply {
                     requestMethod = "PATCH"
                     doOutput = true
                     connectTimeout = 10_000
@@ -187,9 +194,10 @@ object SupabaseClient {
                 conn.outputStream.bufferedWriter().use { it.write(body.toString()) }
                 val code = conn.responseCode
                 Log.d(TAG, "updateDeviceSlug response: $code")
-                conn.disconnect()
             } catch (e: Exception) {
                 Log.e(TAG, "updateDeviceSlug failed", e)
+            } finally {
+                conn?.disconnect()
             }
         }
     }
