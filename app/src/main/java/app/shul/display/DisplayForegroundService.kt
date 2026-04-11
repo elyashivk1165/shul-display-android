@@ -195,55 +195,63 @@ class DisplayForegroundService : Service() {
             supabaseKey = supabaseKey,
             onCommand = { cmd ->
                 serviceScope.launch(exceptionHandler) {
-                    // Skip duplicate commands already handled via catch-up path
-                    synchronized(commandIdsLock) {
-                        if (!executedCommandIds.add(cmd.id)) {
-                            Log.w(TAG, "Skipping duplicate command ${cmd.id} (already executed)")
-                            return@launch
-                        }
-                        if (executedCommandIds.size > MAX_EXECUTED_IDS) {
-                            executedCommandIds.remove(executedCommandIds.first())
-                        }
-                    }
-                    try {
-                        executeCommand(cmd)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Realtime: failed to execute command ${cmd.command}", e)
-                        SupabaseClient.reportCommandResult(
-                            cmd.id, "error",
-                            e.message?.take(500) ?: "Unknown error"
-                        )
-                    }
+                    safeExecuteCommand(cmd, "realtime")
                 }
             },
             onConnected = {
                 // Catch-up: fetch any commands missed while disconnected
                 val pending = SupabaseClient.getPendingCommands(deviceId)
-                pending.forEach { cmd ->
-                    val isNew = synchronized(commandIdsLock) {
-                        val added = executedCommandIds.add(cmd.id)
-                        if (added && executedCommandIds.size > MAX_EXECUTED_IDS) {
-                            executedCommandIds.remove(executedCommandIds.first())
-                        }
-                        added
-                    }
-                    if (isNew) {
-                        try {
-                            executeCommand(cmd)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Catch-up: failed to execute command ${cmd.command}", e)
-                            SupabaseClient.reportCommandResult(
-                                cmd.id, "error",
-                                e.message?.take(500) ?: "Unknown error"
-                            )
-                        }
-                    }
-                }
+                pending.forEach { cmd -> safeExecuteCommand(cmd, "catch-up") }
                 Log.i(TAG, "Catch-up fetch on reconnect: ${pending.size} pending commands")
             }
         )
         realtimeListener?.start()
         Log.d(TAG, "Realtime listener started")
+    }
+
+    /**
+     * Safely execute a command with deduplication, acknowledgment, and result reporting.
+     * Flow: dedup check → acknowledge (mark delivered) → execute → report result → heartbeat
+     */
+    private suspend fun safeExecuteCommand(cmd: DeviceCommand, source: String) {
+        // 1. Deduplication check
+        synchronized(commandIdsLock) {
+            if (!executedCommandIds.add(cmd.id)) {
+                Log.w(TAG, "Skipping duplicate command ${cmd.id} from $source (already executed)")
+                return
+            }
+            if (executedCommandIds.size > MAX_EXECUTED_IDS) {
+                executedCommandIds.remove(executedCommandIds.first())
+            }
+        }
+
+        // 2. Acknowledge receipt (marks executed_at so it won't be fetched again)
+        SupabaseClient.acknowledgeCommand(cmd.id)
+
+        // 3. Execute and report result
+        try {
+            executeCommand(cmd)
+            // Only report success if executeCommand didn't already report a specific result
+            if (cmd.command !in listOf("SCREEN_OFF", "SCREEN_ON", "RESTART_APP")) {
+                SupabaseClient.reportCommandResult(cmd.id, "success")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "$source: failed to execute command ${cmd.command}", e)
+            SupabaseClient.reportCommandResult(
+                cmd.id, "error",
+                e.message?.take(500) ?: "Unknown error"
+            )
+        }
+
+        // 4. Send immediate heartbeat so admin sees updated device state
+        try {
+            val deviceId = DeviceUtils.getDeviceId(applicationContext)
+            val info = DeviceUtils.getFullDeviceInfo(applicationContext)
+            info.put("last_command", cmd.command)
+            info.put("realtime_connected", realtimeListener?.isConnected() == true)
+            info.put("is_foreground", MainActivity.isForeground)
+            SupabaseClient.updateLastSeen(deviceId, info)
+        } catch (_: Exception) { }
     }
 
     private suspend fun executeCommand(cmd: DeviceCommand) {

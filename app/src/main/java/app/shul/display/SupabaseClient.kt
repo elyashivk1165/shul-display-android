@@ -25,46 +25,103 @@ object SupabaseClient {
     const val SUPABASE_URL = "https://wifpjexmcbkgfnjmmpst.supabase.co"
     private val ANON_KEY: String get() = BuildConfig.SUPABASE_ANON_KEY
 
-    private fun headers(): Map<String, String> = mapOf(
+    private const val CONNECT_TIMEOUT = 10_000
+    private const val READ_TIMEOUT = 10_000
+    private const val MAX_RETRIES = 2
+    private const val STALE_COMMAND_SECONDS = 300L // 5 minutes
+
+    // ── HTTP helper ─────────────────────────────────────────────────────────
+
+    private fun baseHeaders(): Map<String, String> = mapOf(
         "apikey" to ANON_KEY,
         "Authorization" to "Bearer $ANON_KEY",
         "Content-Type" to "application/json"
     )
 
+    /**
+     * Execute an HTTP request with retry logic and proper connection cleanup.
+     * Returns the response code and body (if successful).
+     */
+    private fun executeRequest(
+        url: String,
+        method: String,
+        body: String? = null,
+        extraHeaders: Map<String, String> = emptyMap(),
+        retries: Int = MAX_RETRIES
+    ): Pair<Int, String?> {
+        var lastException: Exception? = null
+        repeat(retries + 1) { attempt ->
+            var conn: HttpURLConnection? = null
+            try {
+                conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                    requestMethod = method
+                    connectTimeout = CONNECT_TIMEOUT
+                    readTimeout = READ_TIMEOUT
+                    doOutput = body != null
+                    baseHeaders().forEach { (k, v) -> setRequestProperty(k, v) }
+                    extraHeaders.forEach { (k, v) -> setRequestProperty(k, v) }
+                }
+
+                if (body != null) {
+                    conn.outputStream.bufferedWriter().use { it.write(body) }
+                }
+
+                val code = conn.responseCode
+                val responseBody = if (code == HttpURLConnection.HTTP_OK) {
+                    conn.inputStream.bufferedReader().use(BufferedReader::readText)
+                } else null
+
+                // Don't retry on client errors (4xx) except 429
+                if (code in 400..499 && code != 429) {
+                    return Pair(code, responseBody)
+                }
+                // Retry on 429 (rate limited) or 5xx (server error)
+                if (code == 429 || code >= 500) {
+                    Log.w(TAG, "Request $method $url returned $code, attempt ${attempt + 1}")
+                    if (attempt < retries) {
+                        Thread.sleep((attempt + 1) * 1000L) // simple backoff
+                        return@repeat
+                    }
+                }
+                return Pair(code, responseBody)
+            } catch (e: Exception) {
+                lastException = e
+                Log.w(TAG, "Request $method $url failed, attempt ${attempt + 1}: ${e.message}")
+                if (attempt < retries) {
+                    Thread.sleep((attempt + 1) * 1000L)
+                }
+            } finally {
+                conn?.disconnect()
+            }
+        }
+        throw lastException ?: IOException("Request failed after ${retries + 1} attempts")
+    }
+
+    // ── Device operations ────────────────────────────────────────────────────
+
     suspend fun registerDevice(deviceId: String, slug: String, appVersion: String) {
         withContext(Dispatchers.IO) {
-            var conn: HttpURLConnection? = null
             try {
                 val body = JSONObject().apply {
                     put("device_id", deviceId)
                     put("slug", slug)
                     put("app_version", appVersion)
                 }
-
-                val url = URL("$SUPABASE_URL/rest/v1/devices")
-                conn = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    doOutput = true
-                    connectTimeout = 10_000
-                    readTimeout = 10_000
-                    headers().forEach { (k, v) -> setRequestProperty(k, v) }
-                    setRequestProperty("Prefer", "resolution=merge-duplicates")
-                }
-
-                conn.outputStream.bufferedWriter().use { it.write(body.toString()) }
-                val code = conn.responseCode
+                val (code, _) = executeRequest(
+                    url = "$SUPABASE_URL/rest/v1/devices",
+                    method = "POST",
+                    body = body.toString(),
+                    extraHeaders = mapOf("Prefer" to "resolution=merge-duplicates")
+                )
                 Log.d(TAG, "registerDevice response: $code")
             } catch (e: Exception) {
                 Log.e(TAG, "registerDevice failed", e)
-            } finally {
-                conn?.disconnect()
             }
         }
     }
 
     suspend fun updateLastSeen(deviceId: String, deviceInfo: JSONObject? = null) {
         withContext(Dispatchers.IO) {
-            var conn: HttpURLConnection? = null
             try {
                 val body = JSONObject().apply {
                     put("last_seen", nowIso())
@@ -72,66 +129,51 @@ object SupabaseClient {
                         put("device_info", deviceInfo)
                     }
                 }
-
-                val url = URL("$SUPABASE_URL/rest/v1/devices?device_id=eq.$deviceId")
-                conn = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "PATCH"
-                    doOutput = true
-                    connectTimeout = 10_000
-                    readTimeout = 10_000
-                    headers().forEach { (k, v) -> setRequestProperty(k, v) }
-                }
-
-                conn.outputStream.bufferedWriter().use { it.write(body.toString()) }
-                val code = conn.responseCode
+                val (code, _) = executeRequest(
+                    url = "$SUPABASE_URL/rest/v1/devices?device_id=eq.$deviceId",
+                    method = "PATCH",
+                    body = body.toString()
+                )
                 Log.d(TAG, "updateLastSeen response: $code")
             } catch (e: Exception) {
                 Log.e(TAG, "updateLastSeen failed", e)
-            } finally {
-                conn?.disconnect()
             }
         }
     }
 
+    suspend fun updateDeviceSlug(deviceId: String, newSlug: String) {
+        withContext(Dispatchers.IO) {
+            try {
+                val body = JSONObject().apply { put("slug", newSlug) }
+                val (code, _) = executeRequest(
+                    url = "$SUPABASE_URL/rest/v1/devices?device_id=eq.$deviceId",
+                    method = "PATCH",
+                    body = body.toString()
+                )
+                Log.d(TAG, "updateDeviceSlug response: $code")
+            } catch (e: Exception) {
+                Log.e(TAG, "updateDeviceSlug failed", e)
+            }
+        }
+    }
+
+    // ── Command operations ───────────────────────────────────────────────────
+
     suspend fun getPendingCommands(deviceId: String): List<DeviceCommand> {
         return withContext(Dispatchers.IO) {
             try {
-                // Fix 4: Only fetch commands created in the last 5 minutes to reject stale commands
-                val fiveMinutesAgo = java.time.Instant.now().minusSeconds(300).toString()
-                val url = URL(
-                    "$SUPABASE_URL/rest/v1/device_commands" +
+                val cutoff = Instant.now().minusSeconds(STALE_COMMAND_SECONDS).toString()
+                val (code, responseBody) = executeRequest(
+                    url = "$SUPABASE_URL/rest/v1/device_commands" +
                         "?device_id=eq.$deviceId&executed_at=is.null&order=created_at.asc" +
-                        "&created_at=gte.$fiveMinutesAgo"
+                        "&created_at=gte.$cutoff",
+                    method = "GET"
                 )
-                val conn = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    connectTimeout = 10_000
-                    readTimeout = 10_000
-                    headers().forEach { (k, v) -> setRequestProperty(k, v) }
-                }
-
-                val code = conn.responseCode
                 when (code) {
-                    HttpURLConnection.HTTP_OK -> {
-                        val response = conn.inputStream.bufferedReader().use(BufferedReader::readText)
-                        conn.disconnect()
-                        parseCommands(response)
-                    }
-                    429 -> {
-                        Log.w(TAG, "Rate limited by Supabase (429)")
-                        conn.disconnect()
-                        throw IOException("Rate limited (429)")
-                    }
-                    HttpURLConnection.HTTP_UNAUTHORIZED -> {
-                        Log.e(TAG, "Unauthorized (401) - check API key")
-                        conn.disconnect()
-                        throw IOException("Unauthorized (401)")
-                    }
-                    else -> {
-                        Log.w(TAG, "Unexpected response: $code")
-                        conn.disconnect()
-                        throw IOException("HTTP $code")
-                    }
+                    HttpURLConnection.HTTP_OK -> parseCommands(responseBody ?: "[]")
+                    429 -> throw IOException("Rate limited (429)")
+                    HttpURLConnection.HTTP_UNAUTHORIZED -> throw IOException("Unauthorized (401)")
+                    else -> throw IOException("HTTP $code")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "getPendingCommands failed", e)
@@ -141,66 +183,53 @@ object SupabaseClient {
     }
 
     /**
-     * Write result and result_message back to the device_commands row so
-     * the admin panel can poll for completion status.
+     * Mark command as delivered (acknowledged by device, about to execute).
+     * Prevents re-execution if reportCommandResult fails later.
+     */
+    suspend fun acknowledgeCommand(commandId: String) {
+        withContext(Dispatchers.IO) {
+            try {
+                val body = JSONObject().apply {
+                    put("executed_at", nowIso())
+                    put("result", "delivered")
+                }
+                val (code, _) = executeRequest(
+                    url = "$SUPABASE_URL/rest/v1/device_commands?id=eq.$commandId",
+                    method = "PATCH",
+                    body = body.toString()
+                )
+                Log.d(TAG, "acknowledgeCommand response: $code")
+            } catch (e: Exception) {
+                Log.e(TAG, "acknowledgeCommand failed", e)
+            }
+        }
+    }
+
+    /**
+     * Write final result and result_message back to the device_commands row
+     * so the admin panel can see the outcome.
      */
     suspend fun reportCommandResult(commandId: String, result: String, message: String = "") {
         withContext(Dispatchers.IO) {
-            var conn: HttpURLConnection? = null
             try {
                 val body = JSONObject().apply {
                     put("executed_at", nowIso())
                     put("result", result)
                     if (message.isNotBlank()) put("result_message", message)
                 }
-
-                val url = URL("$SUPABASE_URL/rest/v1/device_commands?id=eq.$commandId")
-                conn = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "PATCH"
-                    doOutput = true
-                    connectTimeout = 10_000
-                    readTimeout = 10_000
-                    headers().forEach { (k, v) -> setRequestProperty(k, v) }
-                }
-
-                conn.outputStream.bufferedWriter().use { it.write(body.toString()) }
-                val code = conn.responseCode
+                val (code, _) = executeRequest(
+                    url = "$SUPABASE_URL/rest/v1/device_commands?id=eq.$commandId",
+                    method = "PATCH",
+                    body = body.toString()
+                )
                 Log.d(TAG, "reportCommandResult response: $code")
             } catch (e: Exception) {
                 Log.e(TAG, "reportCommandResult failed", e)
-            } finally {
-                conn?.disconnect()
             }
         }
     }
 
-    suspend fun updateDeviceSlug(deviceId: String, newSlug: String) {
-        withContext(Dispatchers.IO) {
-            var conn: HttpURLConnection? = null
-            try {
-                val body = JSONObject().apply {
-                    put("slug", newSlug)
-                }
-
-                val url = URL("$SUPABASE_URL/rest/v1/devices?device_id=eq.$deviceId")
-                conn = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "PATCH"
-                    doOutput = true
-                    connectTimeout = 10_000
-                    readTimeout = 10_000
-                    headers().forEach { (k, v) -> setRequestProperty(k, v) }
-                }
-
-                conn.outputStream.bufferedWriter().use { it.write(body.toString()) }
-                val code = conn.responseCode
-                Log.d(TAG, "updateDeviceSlug response: $code")
-            } catch (e: Exception) {
-                Log.e(TAG, "updateDeviceSlug failed", e)
-            } finally {
-                conn?.disconnect()
-            }
-        }
-    }
+    // ── Helpers ──────────────────────────────────────────────────────────────
 
     private fun parseCommands(json: String): List<DeviceCommand> {
         val arr = JSONArray(json)
