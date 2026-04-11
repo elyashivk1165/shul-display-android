@@ -27,6 +27,7 @@ import androidx.work.WorkManager
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
 class SetupActivity : AppCompatActivity() {
@@ -43,7 +44,7 @@ class SetupActivity : AppCompatActivity() {
         private const val REQUEST_EXACT_ALARM = 1005
         private const val REQUEST_TURN_SCREEN_ON = 1006
         private const val REQUEST_NOTIFICATIONS = 1007
-        private val SLUG_REGEX = Regex("^[a-zA-Z0-9_-]{1,50}$")
+        private val SLUG_REGEX = Regex("^[a-zA-Z0-9._-]{3,50}$")
 
         /** True while SetupActivity is in the foreground — prevents accessibility
          *  service from auto-launching MainActivity over the setup flow. */
@@ -93,40 +94,74 @@ class SetupActivity : AppCompatActivity() {
         }
 
         saveButton.setOnClickListener {
+            if (!saveButton.isEnabled) return@setOnClickListener
+
             val slug = slugInput.text.toString().trim()
             if (slug.isBlank()) {
                 errorText.text = "נא להכניס קוד בית הכנסת"
-                errorText.visibility = android.view.View.VISIBLE
+                errorText.visibility = View.VISIBLE
                 return@setOnClickListener
             }
             if (!isValidSlug(slug)) {
-                errorText.text = "קוד לא תקין — אותיות, מספרים, מקף בלבד"
-                errorText.visibility = android.view.View.VISIBLE
+                errorText.text = "קוד לא תקין — אותיות, מספרים, מקף בלבד (3-50 תווים)"
+                errorText.visibility = View.VISIBLE
                 return@setOnClickListener
             }
-            errorText.visibility = android.view.View.GONE
+            errorText.visibility = View.GONE
 
-            prefs.edit().putString("slug", slug).apply()
+            // Disable button and show loading
+            saveButton.isEnabled = false
+            val originalText = saveButton.text
+            saveButton.text = "מתחבר..."
 
             val deviceId = DeviceUtils.getDeviceId(this)
             val appVersion = DeviceUtils.getAppVersion(this)
+
             lifecycleScope.launch(Dispatchers.IO) {
                 try {
                     SupabaseClient.registerDevice(deviceId, slug, appVersion)
+
+                    // Only save slug AFTER successful registration
+                    withContext(Dispatchers.Main) {
+                        prefs.edit().putString("slug", slug).apply()
+                        scheduleCommandPoller()
+
+                        if (fromSettings) {
+                            MainActivity.instance?.updateSlug(slug)
+                            launchMainActivity()
+                        } else {
+                            requestOverlayPermission()
+                        }
+                    }
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to register device", e)
+                    withContext(Dispatchers.Main) {
+                        saveButton.isEnabled = true
+                        saveButton.text = originalText
+                        errorText.text = "שגיאה בהתחברות: ${e.message ?: "בדוק חיבור אינטרנט"}"
+                        errorText.visibility = View.VISIBLE
+                    }
                 }
             }
+        }
+    }
 
-            scheduleCommandPoller()
-
-            if (fromSettings) {
-                // Update running MainActivity and return to it
-                MainActivity.instance?.updateSlug(slug)
-                launchMainActivity()
-            } else {
-                requestOverlayPermission()
-            }
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (fromSettings) {
+            // Return to MainActivity from settings mode
+            launchMainActivity()
+        } else {
+            // During initial setup, warn user
+            AlertDialog.Builder(this)
+                .setTitle("ביטול הגדרה")
+                .setMessage("האם לצאת? ההגדרה חייבת להסתיים כדי שהאפליקציה תעבוד.")
+                .setPositiveButton("המשך הגדרה") { _, _ -> }
+                .setNegativeButton("יציאה") { _, _ ->
+                    @Suppress("DEPRECATION")
+                    super.onBackPressed()
+                }
+                .show()
         }
     }
 

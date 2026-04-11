@@ -57,7 +57,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "MainActivity"
         const val BASE_URL = "https://shul-display.vercel.app/"
-        private val SLUG_REGEX = Regex("^[a-zA-Z0-9_-]{1,50}$")
+        private val SLUG_REGEX = Regex("^[a-zA-Z0-9._-]{3,50}$")
         private var instanceRef: WeakReference<MainActivity>? = null
         val instance: MainActivity? get() = instanceRef?.get()?.takeIf { !it.isDestroyed && !it.isFinishing }
         private const val REQUEST_ROLE_HOME = 1001
