@@ -115,6 +115,16 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.webView)
         reloadOverlay = findViewById(R.id.reloadOverlay)
         setupWebView()
+
+        // Preconnect to Vercel + Supabase for faster initial load
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            webView.loadData(
+                "<link rel='preconnect' href='$BASE_URL'>" +
+                "<link rel='preconnect' href='${SupabaseClient.SUPABASE_URL}'>",
+                "text/html", "UTF-8"
+            )
+        }
+
         val encodedSlug = Uri.encode(slug)
         webView.loadUrl("$BASE_URL$encodedSlug")
 

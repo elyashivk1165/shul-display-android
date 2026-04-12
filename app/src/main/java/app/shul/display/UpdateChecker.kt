@@ -98,17 +98,24 @@ object UpdateChecker {
             val cacheDir = context.cacheDir
             if (!cacheDir.exists()) cacheDir.mkdirs()
             val apkFile = File(cacheDir, "update.apk")
-            if (apkFile.exists()) apkFile.delete()
+
+            // Resume support: if partial file exists, try to resume download
+            val existingSize = if (apkFile.exists()) apkFile.length() else 0L
 
             // Follow redirects (GitHub releases redirect to CDN)
             var downloadUrl = info.downloadUrl
             var redirects = 0
+            var downloaded = false
             while (redirects < 5) {
                 val conn = (URL(downloadUrl).openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
                     connectTimeout = 15_000
                     readTimeout = 60_000
                     instanceFollowRedirects = false
+                    // Request resume if we have a partial file
+                    if (existingSize > 0) {
+                        setRequestProperty("Range", "bytes=$existingSize-")
+                    }
                 }
                 val code = conn.responseCode
                 if (code in 300..399) {
@@ -119,21 +126,36 @@ object UpdateChecker {
                     redirects++
                     continue
                 }
-                if (code != HttpURLConnection.HTTP_OK) {
-                    conn.disconnect()
-                    onStatus("שגיאה בהורדה: HTTP $code")
-                    return@withContext
-                }
 
-                FileOutputStream(apkFile).use { out ->
-                    conn.inputStream.use { it.copyTo(out) }
+                when (code) {
+                    HttpURLConnection.HTTP_OK -> {
+                        // Full download (server doesn't support resume or fresh start)
+                        if (existingSize > 0) apkFile.delete()
+                        FileOutputStream(apkFile).use { out ->
+                            conn.inputStream.use { it.copyTo(out) }
+                        }
+                        downloaded = true
+                    }
+                    HttpURLConnection.HTTP_PARTIAL -> {
+                        // Resume: append to existing file
+                        onStatus("ממשיך הורדה מ-${existingSize / 1024}KB...")
+                        FileOutputStream(apkFile, true).use { out ->
+                            conn.inputStream.use { it.copyTo(out) }
+                        }
+                        downloaded = true
+                    }
+                    else -> {
+                        conn.disconnect()
+                        onStatus("שגיאה בהורדה: HTTP $code")
+                        return@withContext
+                    }
                 }
                 conn.disconnect()
                 break
             }
 
-            if (!apkFile.exists() || apkFile.length() < 1000) {
-                apkFile.delete() // clean up partial download
+            if (!downloaded || !apkFile.exists() || apkFile.length() < 1000) {
+                apkFile.delete()
                 onStatus("ההורדה נכשלה — קובץ ריק")
                 return@withContext
             }
