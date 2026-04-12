@@ -57,7 +57,7 @@ class SetupActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        prefs = getSharedPreferences("shul_display_prefs", MODE_PRIVATE)
+        prefs = SecurePrefs.get(this)
 
         fromSettings = intent.getBooleanExtra("from_settings", false)
         val existingSlug = prefs.getString("slug", null)

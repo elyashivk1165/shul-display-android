@@ -72,4 +72,5 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.cardview)
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 }

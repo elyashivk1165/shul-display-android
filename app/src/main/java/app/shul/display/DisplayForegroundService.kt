@@ -344,7 +344,7 @@ class DisplayForegroundService : Service() {
                 val newSlug = cmd.payload["slug"] as? String
                 if (!newSlug.isNullOrBlank()) {
                     val deviceId = DeviceUtils.getDeviceId(applicationContext)
-                    getSharedPreferences("shul_display_prefs", MODE_PRIVATE)
+                    SecurePrefs.get(applicationContext)
                         .edit().putString("slug", newSlug).apply()
                     SupabaseClient.updateDeviceSlug(deviceId, newSlug)
                     if (activity == null) throw IllegalStateException("אפליקציה לא פעילה")
@@ -354,7 +354,7 @@ class DisplayForegroundService : Service() {
             }
             "RESTART_APP" -> {
                 // Sync write before exit
-                getSharedPreferences("shul_display_prefs", MODE_PRIVATE).edit().commit()
+                SecurePrefs.get(applicationContext).edit().commit()
                 // Report result BEFORE restarting — exit(0) kills the process immediately
                 SupabaseClient.reportCommandResult(cmd.id, "success")
                 val launchIntent = packageManager.getLaunchIntentForPackage(packageName)

@@ -101,7 +101,7 @@ class MainActivity : AppCompatActivity() {
         setupKioskMode()
         enableFullscreen()
 
-        prefs = getSharedPreferences("shul_display_prefs", MODE_PRIVATE)
+        prefs = SecurePrefs.get(this)
         val slug = prefs.getString("slug", "") ?: ""
 
         if (slug.isBlank()) {

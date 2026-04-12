@@ -33,7 +33,7 @@ object DeviceUtils {
         return if (!androidId.isNullOrBlank() && androidId != "9774d56d682e549c") {
             androidId
         } else {
-            val prefs = context.getSharedPreferences("shul_display_prefs", Context.MODE_PRIVATE)
+            val prefs = SecurePrefs.get(context)
             prefs.getString("fallback_device_id", null) ?: run {
                 val newId = UUID.randomUUID().toString()
                 prefs.edit().putString("fallback_device_id", newId).apply()
