@@ -39,7 +39,7 @@ jobs:
       - name: Build Signed APK
         run: |
           ./gradlew assembleRelease \
-            -PKEYSTORE_PATH=../keystore.jks \
+            -PKEYSTORE_PATH=keystore.jks \
             -PKEYSTORE_PASS=shuldisplay123 \
             -PKEY_ALIAS=shuldisplay \
             -PKEY_PASS=shuldisplay123 \
