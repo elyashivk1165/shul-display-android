@@ -204,11 +204,14 @@ class MainActivity : AppCompatActivity() {
                 try {
                     view.webViewClient = WebViewClient()
                     view.webChromeClient = WebChromeClient()
-                    container.removeView(view)
+                    if (view.parent === container) container.removeView(view)
                     view.destroy()
                 } catch (e: Exception) {
                     Log.e(TAG, "Error cleaning up crashed WebView: ${e.message}")
+                    try { view.destroy() } catch (_: Exception) {}
                 }
+                // Clear all children to ensure clean state
+                container.removeAllViews()
                 // Create a fresh WebView and add it to the container
                 webView = WebView(this@MainActivity)
                 webView.layoutParams = ViewGroup.LayoutParams(

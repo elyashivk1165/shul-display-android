@@ -158,13 +158,18 @@ class DisplayForegroundService : Service() {
         }
     }
 
-    /** Background recovery: if MainActivity is alive but not in foreground, bring it back. */
+    /** Background recovery: if MainActivity is alive but not in foreground, bring it back.
+     *  IMPORTANT: Does NOT recover during scheduled screen-off periods. */
     private fun startBackgroundRecovery(): Job {
         return serviceScope.launch(exceptionHandler) {
             delay(10_000) // wait for startup to settle
             while (isActive) {
                 delay(8_000)
                 if (MainActivity.isAlive && !MainActivity.isForeground) {
+                    // Don't fight the screen-off schedule!
+                    if (isInScheduledOffPeriod()) {
+                        continue
+                    }
                     Log.w(TAG, "BackgroundRecovery: MainActivity went to background — bringing to front")
                     try {
                         val intent = Intent(applicationContext, MainActivity::class.java).apply {
@@ -180,6 +185,32 @@ class DisplayForegroundService : Service() {
                     }
                 }
             }
+        }
+    }
+
+    /** Check if current time falls within the scheduled screen-off period. */
+    private fun isInScheduledOffPeriod(): Boolean {
+        if (!ScreenScheduleManager.isEnabled(applicationContext)) return false
+        val (offTime, onTime, days) = ScreenScheduleManager.getSchedule(applicationContext)
+        if (offTime == null || onTime == null) return false
+
+        val cal = java.util.Calendar.getInstance()
+        // Check if today is a scheduled day (0=Sun, 1=Mon, ... 6=Sat)
+        val todayDay = cal.get(java.util.Calendar.DAY_OF_WEEK) - 1 // Convert 1-7 to 0-6
+        if (!days.contains(todayDay)) return false
+
+        val currentMinutes = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
+        val offParts = offTime.split(":").map { it.toIntOrNull() ?: 0 }
+        val onParts = onTime.split(":").map { it.toIntOrNull() ?: 0 }
+        val offMinutes = offParts.getOrElse(0) { 0 } * 60 + offParts.getOrElse(1) { 0 }
+        val onMinutes = onParts.getOrElse(0) { 0 } * 60 + onParts.getOrElse(1) { 0 }
+
+        return if (offMinutes <= onMinutes) {
+            // Same-day: e.g., OFF at 13:00, ON at 14:00
+            currentMinutes in offMinutes until onMinutes
+        } else {
+            // Overnight: e.g., OFF at 23:00, ON at 07:00
+            currentMinutes >= offMinutes || currentMinutes < onMinutes
         }
     }
 

@@ -196,14 +196,26 @@ class ScreenScheduleManager(private val context: Context) {
         val offTime = prefs.getString("off_time", null) ?: return
         val onTime = prefs.getString("on_time", null) ?: return
 
+        // Read the scheduled days list — only reschedule if this day is still active
+        val daysStr = prefs.getString("schedule_days", null)
+        val scheduledDays = daysStr?.split(",")?.mapNotNull { it.toIntOrNull() } ?: (0..6).toList()
+
         when {
             requestCode in 1000..1006 -> {
                 val day = requestCode - 1000
+                if (!scheduledDays.contains(day)) {
+                    Log.i(TAG, "Day $day no longer in schedule, not rescheduling SCREEN_OFF")
+                    return
+                }
                 val parts = offTime.split(":").map { it.toIntOrNull() ?: 0 }
                 scheduleAlarmForDay(context, parts.getOrElse(0) { 0 }, parts.getOrElse(1) { 0 }, day, "SCREEN_OFF", requestCode)
             }
             requestCode in 2000..2006 -> {
                 val day = requestCode - 2000
+                if (!scheduledDays.contains(day)) {
+                    Log.i(TAG, "Day $day no longer in schedule, not rescheduling SCREEN_ON")
+                    return
+                }
                 val parts = onTime.split(":").map { it.toIntOrNull() ?: 0 }
                 scheduleAlarmForDay(context, parts.getOrElse(0) { 0 }, parts.getOrElse(1) { 0 }, day, "SCREEN_ON", requestCode)
             }

@@ -49,9 +49,12 @@ class ScreenAlarmReceiver : BroadcastReceiver() {
                     Log.i(TAG, "Schedule: turning screen ON (rc=$requestCode)")
                     try {
                         handleScreenOn(context)
+                        // Wake lock stays held — released by MainActivity.applyWakeScreenFlags()
+                        // or auto-released after 60 seconds (safety net)
                     } catch (e: Exception) {
                         Log.e(TAG, "Error handling SCREEN_ON: ${e.message}")
-                        releaseWakeLock()
+                        // Don't release wake lock early — let it auto-expire after 60s
+                        // Releasing too early prevents the screen from waking
                     }
                 }
                 "app.shul.display.SCREEN_OFF" -> {
