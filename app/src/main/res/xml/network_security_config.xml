@@ -6,16 +6,4 @@
             <certificates src="system" />
         </trust-anchors>
     </base-config>
-
-    <!-- Pin Supabase domain certificates (SHA-256 of SPKI) -->
-    <!-- Pins auto-expire after 2027-01-01 to prevent lockout if certs rotate -->
-    <domain-config>
-        <domain includeSubdomains="true">supabase.co</domain>
-        <pin-set expiration="2027-01-01">
-            <!-- Let's Encrypt ISRG Root X1 (used by most Supabase deployments) -->
-            <pin digest="SHA-256">C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=</pin>
-            <!-- Backup: Let's Encrypt E1 intermediate -->
-            <pin digest="SHA-256">hGMfOE1VLBxuOC+NrZCyOJJ8gFMHJTr67RB5NWQH1Y0=</pin>
-        </pin-set>
-    </domain-config>
 </network-security-config>
