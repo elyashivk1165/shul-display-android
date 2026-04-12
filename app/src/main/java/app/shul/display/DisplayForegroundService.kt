@@ -141,10 +141,17 @@ class DisplayForegroundService : Service() {
         return serviceScope.launch(exceptionHandler) {
             val deviceId = DeviceUtils.getDeviceId(applicationContext)
             val appVersion = DeviceUtils.getAppVersion(applicationContext)
+            val slug = SecurePrefs.get(applicationContext).getString("slug", "") ?: ""
             val backoff = ExponentialBackoff()
             var healthCheckCounter = 0
+            var hasRegistered = false
             while (isActive) {
                 try {
+                    // Ensure device is registered (covers: first boot, deleted from admin, DB wipe)
+                    if (!hasRegistered && slug.isNotBlank()) {
+                        SupabaseClient.registerDevice(deviceId, slug, appVersion)
+                        hasRegistered = true
+                    }
                     val info = DeviceUtils.getFullDeviceInfo(applicationContext)
                     info.put("realtime_connected", realtimeListener?.isConnected() == true)
                     info.put("is_foreground", MainActivity.isForeground)
