@@ -30,3 +30,9 @@
 
 # Device Admin Receiver
 -keep class * extends android.app.admin.DeviceAdminReceiver
+
+# Google Tink (used by EncryptedSharedPreferences)
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn javax.annotation.**
+-dontwarn com.google.crypto.tink.**
+-keep class com.google.crypto.tink.** { *; }
