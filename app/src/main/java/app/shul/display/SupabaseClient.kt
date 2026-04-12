@@ -28,7 +28,7 @@ object SupabaseClient {
     private const val CONNECT_TIMEOUT = 10_000
     private const val READ_TIMEOUT = 10_000
     private const val MAX_RETRIES = 2
-    private const val STALE_COMMAND_SECONDS = 300L // 5 minutes
+    private const val STALE_COMMAND_SECONDS = 3600L // 1 hour — allows catch-up after scheduled off periods
 
     // ── HTTP helper ─────────────────────────────────────────────────────────
 
