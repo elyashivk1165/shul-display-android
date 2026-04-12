@@ -66,6 +66,8 @@ class MainActivity : AppCompatActivity() {
         @Volatile var isForeground = false
         /** True while MainActivity exists (between onCreate and onDestroy). */
         @Volatile var isAlive = false
+        /** Timestamp when user last opened settings — recovery pauses for 2 minutes */
+        @Volatile var lastSettingsOpenTime = 0L
     }
 
     @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
@@ -370,6 +372,7 @@ class MainActivity : AppCompatActivity() {
             add(SettingsAction("⚙️", "מצב קיוסק מלא", "Device Owner", sectionBreakBefore = true) { showKioskModeDialog() })
             add(SettingsAction("🏠", "הגדר כ-Launcher") { requestLauncherRole() })
             add(SettingsAction("🔐", "הרשאות אפליקציה") {
+                lastSettingsOpenTime = System.currentTimeMillis()
                 startActivity(Intent(this@MainActivity, SetupActivity::class.java).putExtra("from_settings", true))
             })
             add(SettingsAction("🔲", "כבה מסך עכשיו", isDanger = true, sectionBreakBefore = true) {

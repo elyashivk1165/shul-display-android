@@ -191,6 +191,15 @@ class DisplayForegroundService : Service() {
                     if (isInScheduledOffPeriod()) {
                         continue
                     }
+                    // Don't fight SetupActivity (user is in settings)
+                    if (SetupActivity.isVisible) {
+                        continue
+                    }
+                    // Don't fight system settings screens — user may have opened
+                    // Android settings from SetupActivity (2 minute cooldown)
+                    if (System.currentTimeMillis() - MainActivity.lastSettingsOpenTime < 120_000) {
+                        continue
+                    }
                     Log.w(TAG, "BackgroundRecovery: MainActivity went to background — bringing to front")
                     try {
                         val intent = Intent(applicationContext, MainActivity::class.java).apply {

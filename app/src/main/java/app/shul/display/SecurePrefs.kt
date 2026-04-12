@@ -27,6 +27,8 @@ object SecurePrefs {
         synchronized(this) {
             instance?.let { return it }
 
+            val plainPrefs = context.applicationContext.getSharedPreferences(PLAIN_PREFS_NAME, Context.MODE_PRIVATE)
+
             val prefs = try {
                 val masterKey = MasterKey.Builder(context.applicationContext)
                     .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -43,11 +45,23 @@ object SecurePrefs {
                 // Migrate from plaintext if not already done
                 migrateFromPlaintext(context, encrypted)
 
+                // Verify migration didn't lose the slug
+                val encSlug = encrypted.getString("slug", null)
+                val plainSlug = plainPrefs.getString("slug", null)
+                if (encSlug == null && plainSlug != null) {
+                    Log.w(TAG, "Encrypted prefs lost slug, re-migrating...")
+                    encrypted.edit()
+                        .putString("slug", plainSlug)
+                        .putBoolean(MIGRATION_KEY, false) // force re-migration
+                        .apply()
+                    migrateFromPlaintext(context, encrypted)
+                }
+
                 Log.d(TAG, "Using encrypted SharedPreferences")
                 encrypted
             } catch (e: Exception) {
                 Log.w(TAG, "EncryptedSharedPreferences unavailable, using plaintext: ${e.message}")
-                context.applicationContext.getSharedPreferences(PLAIN_PREFS_NAME, Context.MODE_PRIVATE)
+                plainPrefs
             }
 
             instance = prefs
@@ -60,17 +74,15 @@ object SecurePrefs {
 
         val plain = context.applicationContext.getSharedPreferences(PLAIN_PREFS_NAME, Context.MODE_PRIVATE)
         val slug = plain.getString("slug", null)
+        val fallbackDeviceId = plain.getString("fallback_device_id", null)
 
-        if (slug != null) {
+        if (slug != null || fallbackDeviceId != null) {
             Log.i(TAG, "Migrating plaintext prefs to encrypted...")
-            encrypted.edit()
-                .putString("slug", slug)
-                .putBoolean(MIGRATION_KEY, true)
-                .apply()
-
-            // Don't delete plaintext yet — other components may still reference it
-            // They'll be updated to use SecurePrefs over time
-            Log.i(TAG, "Migration complete")
+            val editor = encrypted.edit()
+            if (slug != null) editor.putString("slug", slug)
+            if (fallbackDeviceId != null) editor.putString("fallback_device_id", fallbackDeviceId)
+            editor.putBoolean(MIGRATION_KEY, true).apply()
+            Log.i(TAG, "Migration complete (slug=${slug != null}, deviceId=${fallbackDeviceId != null})")
         } else {
             encrypted.edit().putBoolean(MIGRATION_KEY, true).apply()
         }
