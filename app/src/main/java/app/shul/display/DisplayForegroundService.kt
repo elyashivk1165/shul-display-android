@@ -140,20 +140,41 @@ class DisplayForegroundService : Service() {
     private fun startHeartbeat(): Job {
         return serviceScope.launch(exceptionHandler) {
             val deviceId = DeviceUtils.getDeviceId(applicationContext)
+            val appVersion = DeviceUtils.getAppVersion(applicationContext)
             val backoff = ExponentialBackoff()
+            var healthCheckCounter = 0
             while (isActive) {
                 try {
                     val info = DeviceUtils.getFullDeviceInfo(applicationContext)
                     info.put("realtime_connected", realtimeListener?.isConnected() == true)
                     info.put("is_foreground", MainActivity.isForeground)
+                    info.put("scheduled_off", isInScheduledOffPeriod())
+                    info.put("schedule_enabled", ScreenScheduleManager.isEnabled(applicationContext))
+                    info.put("a11y_enabled", ShulAccessibilityService.isEnabled(applicationContext))
+                    info.put("admin_active", ScreenScheduleManager.isDeviceAdminActive(applicationContext))
                     SupabaseClient.updateLastSeen(deviceId, info)
                     backoff.reset()
+
+                    // Health check every 5th heartbeat (~25 min) - log warnings for issues
+                    healthCheckCounter++
+                    if (healthCheckCounter % 5 == 0) {
+                        val issues = mutableListOf<String>()
+                        if (!ShulAccessibilityService.isEnabled(applicationContext)) issues.add("a11y disabled")
+                        if (!ScreenScheduleManager.isDeviceAdminActive(applicationContext)) issues.add("admin not active")
+                        if (realtimeListener?.isConnected() != true) issues.add("realtime disconnected")
+                        if (!MainActivity.isForeground && !isInScheduledOffPeriod()) issues.add("app not foreground")
+                        if (issues.isNotEmpty()) {
+                            SupabaseClient.sendLog(deviceId, "WARN",
+                                "Health check: ${issues.joinToString(", ")}",
+                                appVersion = appVersion)
+                        }
+                    }
                 } catch (e: Exception) {
                     Log.e(TAG, "Heartbeat error", e)
                     delay(backoff.nextDelay())
                     continue
                 }
-                delay(300_000) // 5 minutes — reduces battery/data usage vs 60s
+                delay(300_000) // 5 minutes
             }
         }
     }

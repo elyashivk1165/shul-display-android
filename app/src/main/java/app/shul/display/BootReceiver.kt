@@ -22,15 +22,15 @@ class BootReceiver : BroadcastReceiver() {
 
         Log.i(TAG, "Boot/update received: $action")
 
-        // Start DisplayForegroundService first (always)
-        DisplayForegroundService.start(context)
-
-        // Reschedule screen alarms
+        // Reschedule screen alarms FIRST (before launching anything)
         try {
             ScreenScheduleManager.rescheduleAfterBoot(context)
         } catch (e: Exception) {
             Log.e(TAG, "Schedule reschedule failed: ${e.message}")
         }
+
+        // Start DisplayForegroundService (handles heartbeat, realtime, recovery)
+        DisplayForegroundService.start(context)
 
         // Schedule WorkManager command poller
         try {
