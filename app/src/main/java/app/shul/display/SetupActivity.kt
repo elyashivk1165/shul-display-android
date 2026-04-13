@@ -202,32 +202,9 @@ class SetupActivity : AppCompatActivity() {
     }
 
     private fun hasTurnScreenOnPermission(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return true
-        return try {
-            val appOps = getSystemService(android.app.AppOpsManager::class.java) ?: return true
-            val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                appOps.unsafeCheckOpNoThrow(
-                    "android:turn_screen_on",
-                    android.os.Process.myUid(),
-                    packageName
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                appOps.checkOpNoThrow(
-                    "android:turn_screen_on",
-                    android.os.Process.myUid(),
-                    packageName
-                )
-            }
-            // MODE_ALLOWED or MODE_DEFAULT both mean the permission is effectively granted
-            mode == android.app.AppOpsManager.MODE_ALLOWED ||
-                mode == android.app.AppOpsManager.MODE_DEFAULT
-        } catch (e: Exception) {
-            // On devices where this app-op doesn't exist (many TV boxes),
-            // assume permission is granted since it's declared in manifest
-            Log.w(TAG, "hasTurnScreenOnPermission check failed, assuming granted: ${e.message}")
-            true
-        }
+        // TURN_SCREEN_ON is declared in manifest and auto-granted on most devices.
+        // The AppOps check is unreliable on Android TV — always return true.
+        return true
     }
 
     private fun refreshAllPermissionStatus() {
@@ -257,7 +234,7 @@ class SetupActivity : AppCompatActivity() {
             status = findViewById(R.id.accessibilityStatus),
             granted = ShulAccessibilityService.isEnabled(this),
             descGranted = "✓ שירות פעיל",
-            descNeeded = "נדרש להפעלה אוטומטית לאחר הדלקת המכשיר"
+            descNeeded = "אופציונלי — לא נתמך בכל המכשירים"
         )
         val notificationsGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
@@ -314,34 +291,15 @@ class SetupActivity : AppCompatActivity() {
     }
 
     private fun requestTurnScreenOnPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Many Android TV boxes render system settings pages as a black screen.
-            // Try multiple approaches in order of reliability:
-            val intents = listOf(
-                // 1. Direct app permission settings (most specific, but often black on TV)
-                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")),
-                // 2. General app settings list
-                Intent(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS),
-                // 3. Main settings screen as last resort
-                Intent(Settings.ACTION_SETTINGS)
-            )
-            for (intent in intents) {
-                try {
-                    // Verify the intent resolves before launching
-                    if (intent.resolveActivity(packageManager) != null) {
-                        @Suppress("DEPRECATION")
-                        startActivityForResult(intent, REQUEST_TURN_SCREEN_ON)
-                        Toast.makeText(this, "הגדרות → אפליקציות → shul-display → הרשאות → הפעלת המסך → אפשר", Toast.LENGTH_LONG).show()
-                        return
-                    }
-                } catch (_: Exception) { continue }
-            }
-            // All intents failed — grant may not be possible on this device, skip
-            Toast.makeText(this, "לא ניתן לפתוח הגדרות במכשיר זה. הרשאה עשויה להיות פעילה אוטומטית.", Toast.LENGTH_LONG).show()
-            if (fromSettings) refreshAllPermissionStatus()
+        // On Android TV, settings pages for this permission usually show a black screen.
+        // The TURN_SCREEN_ON permission is declared in manifest and typically auto-granted.
+        // Just show a message and move on.
+        if (hasTurnScreenOnPermission()) {
+            Toast.makeText(this, "✓ הרשאה כבר פעילה", Toast.LENGTH_SHORT).show()
         } else {
-            Toast.makeText(this, "הרשאה ניתנת אוטומטית במכשיר זה", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "הרשאה פעילה אוטומטית ברוב המכשירים", Toast.LENGTH_SHORT).show()
         }
+        if (fromSettings) refreshAllPermissionStatus()
     }
 
     private fun openHdmiCecSettings() {

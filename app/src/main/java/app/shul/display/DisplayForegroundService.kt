@@ -162,12 +162,11 @@ class DisplayForegroundService : Service() {
                     SupabaseClient.updateLastSeen(deviceId, info)
                     backoff.reset()
 
-                    // Health check every 5th heartbeat (~25 min) - log warnings for issues
+                    // Health check every 5th heartbeat (~25 min) - log warnings for critical issues only
                     healthCheckCounter++
                     if (healthCheckCounter % 5 == 0) {
                         val issues = mutableListOf<String>()
-                        if (!ShulAccessibilityService.isEnabled(applicationContext)) issues.add("a11y disabled")
-                        if (!ScreenScheduleManager.isDeviceAdminActive(applicationContext)) issues.add("admin not active")
+                        // Only warn about issues that actually affect functionality
                         if (realtimeListener?.isConnected() != true) issues.add("realtime disconnected")
                         if (!MainActivity.isForeground && !isInScheduledOffPeriod()) issues.add("app not foreground")
                         if (issues.isNotEmpty()) {
