@@ -186,27 +186,33 @@ class DisplayForegroundService : Service() {
     }
 
     /** Background recovery: if MainActivity is alive but not in foreground, bring it back.
-     *  IMPORTANT: Does NOT recover during scheduled screen-off periods. */
+     *  IMPORTANT: Does NOT recover during scheduled screen-off periods.
+     *
+     *  Strategy escalates by how long the activity has been backgrounded:
+     *    • Every 8s: try a direct startActivity (cheap, often works on TVs
+     *      or when SYSTEM_ALERT_WINDOW is granted).
+     *    • After 60s of continuous background: also fire a fullScreenIntent
+     *      notification (ScreenWakeHelper.wakeToApp). On Android 10+ this is
+     *      the only reliable way to bring the activity to the foreground
+     *      from a background context, and it works regardless of the app's
+     *      launcher / overlay permissions. */
     private fun startBackgroundRecovery(): Job {
         return serviceScope.launch(exceptionHandler) {
             delay(10_000) // wait for startup to settle
+            var backgroundedSince = 0L // ms timestamp when we first noticed it backgrounded
+            var lastFullScreenIntentAt = 0L
             while (isActive) {
                 delay(8_000)
+                val nowMs = System.currentTimeMillis()
                 if (MainActivity.isAlive && !MainActivity.isForeground) {
-                    // Don't fight the screen-off schedule!
-                    if (isInScheduledOffPeriod()) {
-                        continue
-                    }
-                    // Don't fight SetupActivity (user is in settings)
-                    if (SetupActivity.isVisible) {
-                        continue
-                    }
-                    // Don't fight system settings screens — user may have opened
-                    // Android settings from SetupActivity (2 minute cooldown)
-                    if (System.currentTimeMillis() - MainActivity.lastSettingsOpenTime < 120_000) {
-                        continue
-                    }
-                    Log.w(TAG, "BackgroundRecovery: MainActivity went to background — bringing to front")
+                    if (isInScheduledOffPeriod()) { backgroundedSince = 0; continue }
+                    if (SetupActivity.isVisible)  { backgroundedSince = 0; continue }
+                    if (nowMs - MainActivity.lastSettingsOpenTime < 120_000) { backgroundedSince = 0; continue }
+
+                    if (backgroundedSince == 0L) backgroundedSince = nowMs
+                    val backgroundedFor = nowMs - backgroundedSince
+
+                    Log.w(TAG, "BackgroundRecovery: MainActivity backgrounded ${backgroundedFor / 1000}s — bringing to front")
                     try {
                         val intent = Intent(applicationContext, MainActivity::class.java).apply {
                             addFlags(
@@ -217,8 +223,23 @@ class DisplayForegroundService : Service() {
                         }
                         startActivity(intent)
                     } catch (e: Exception) {
-                        Log.w(TAG, "BackgroundRecovery: could not bring to front: ${e.message}")
+                        Log.w(TAG, "BackgroundRecovery: startActivity failed: ${e.message}")
                     }
+
+                    // Escalate to fullScreenIntent if startActivity hasn't worked
+                    // for ≥60s. Throttle to once per 60s so we don't spam the
+                    // notification shade.
+                    if (backgroundedFor >= 60_000 && nowMs - lastFullScreenIntentAt >= 60_000) {
+                        Log.w(TAG, "BackgroundRecovery: escalating to fullScreenIntent")
+                        try {
+                            ScreenWakeHelper.wakeToApp(applicationContext)
+                            lastFullScreenIntentAt = nowMs
+                        } catch (e: Exception) {
+                            Log.w(TAG, "BackgroundRecovery: fullScreenIntent failed: ${e.message}")
+                        }
+                    }
+                } else {
+                    backgroundedSince = 0
                 }
             }
         }
