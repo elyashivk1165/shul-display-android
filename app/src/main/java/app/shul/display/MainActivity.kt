@@ -193,8 +193,10 @@ class MainActivity : AppCompatActivity() {
         webView.webViewClient = object : WebViewClient() {
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
                 if (isDestroyed || isFinishing) return true
-                Log.e(TAG, "WebView renderer gone, recreating...")
-                // Report crash to Supabase for remote monitoring
+                Log.e(TAG, "WebView renderer gone, recreating activity...")
+                // Report crash to Supabase for remote monitoring (best-effort,
+                // no-await — we want to recreate ASAP, the IO scope outlives
+                // the activity it hangs off briefly via lifecycleScope).
                 lifecycleScope.launch(Dispatchers.IO) {
                     try {
                         val deviceId = DeviceUtils.getDeviceId(applicationContext)
@@ -204,36 +206,28 @@ class MainActivity : AppCompatActivity() {
                         info.put("did_render_crash_kill", detail.didCrash())
                         SupabaseClient.updateLastSeen(deviceId, info)
                         SupabaseClient.sendLog(deviceId, "ERROR",
-                            "WebView renderer crashed (didCrash=${detail.didCrash()}), recreating...",
+                            "WebView renderer crashed (didCrash=${detail.didCrash()}), recreating activity...",
                             appVersion = appVersion)
                     } catch (_: Exception) { }
                 }
-                val container = findViewById<android.widget.FrameLayout>(R.id.webViewContainer)
-                if (container == null) {
-                    Log.e(TAG, "webViewContainer not found, cannot recover WebView")
-                    return true
-                }
+
+                // Detach the dead WebView from the view tree so the activity
+                // can be recreated cleanly without "View already attached"
+                // errors during recreate().
                 try {
-                    view.webViewClient = WebViewClient()
-                    view.webChromeClient = WebChromeClient()
-                    if (view.parent === container) container.removeView(view)
+                    val container = findViewById<android.widget.FrameLayout>(R.id.webViewContainer)
+                    if (view.parent === container) container?.removeView(view)
                     view.destroy()
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error cleaning up crashed WebView: ${e.message}")
-                    try { view.destroy() } catch (_: Exception) {}
+                    Log.w(TAG, "Error detaching crashed WebView: ${e.message}")
                 }
-                // Clear all children to ensure clean state
-                container.removeAllViews()
-                // Create a fresh WebView and add it to the container
-                webView = WebView(this@MainActivity)
-                webView.layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-                webView.setBackgroundColor(android.graphics.Color.BLACK)
-                container.addView(webView)
-                setupWebView()
-                loadUrl()
+
+                // Recreate the entire activity rather than swapping the
+                // WebView in place. Previous in-place swap left other
+                // activity state in a weird mid-life mode after a crash —
+                // recreate() re-runs onCreate() and gives us a guaranteed
+                // fresh start (memory, lifecycle, listeners, everything).
+                recreate()
                 return true
             }
 
