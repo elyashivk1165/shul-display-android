@@ -241,7 +241,8 @@ object SupabaseClient {
         message: String,
         stacktrace: String? = null,
         extra: JSONObject? = null,
-        appVersion: String? = null
+        appVersion: String? = null,
+        appContext: android.content.Context? = null,
     ) {
         withContext(Dispatchers.IO) {
             try {
@@ -260,7 +261,13 @@ object SupabaseClient {
                     retries = 1 // Don't retry too aggressively for logs
                 )
             } catch (e: Exception) {
-                Log.w(TAG, "sendLog failed: ${e.message}")
+                Log.w(TAG, "sendLog failed, buffering to disk: ${e.message}")
+                // Fall through to disk buffer if the caller passed a context.
+                // Without context we can't reach app filesDir, so the log is
+                // dropped — same behavior as before.
+                if (appContext != null) {
+                    LogBuffer.append(appContext, deviceId, level, message, stacktrace, extra, appVersion)
+                }
             }
         }
     }

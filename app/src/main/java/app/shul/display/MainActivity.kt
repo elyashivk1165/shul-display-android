@@ -207,7 +207,8 @@ class MainActivity : AppCompatActivity() {
                         SupabaseClient.updateLastSeen(deviceId, info)
                         SupabaseClient.sendLog(deviceId, "ERROR",
                             "WebView renderer crashed (didCrash=${detail.didCrash()}), recreating activity...",
-                            appVersion = appVersion)
+                            appVersion = appVersion,
+                            appContext = applicationContext)
                     } catch (_: Exception) { }
                 }
 

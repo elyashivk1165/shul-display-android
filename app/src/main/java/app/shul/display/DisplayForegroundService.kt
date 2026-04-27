@@ -172,6 +172,29 @@ class DisplayForegroundService : Service() {
                     SupabaseClient.updateLastSeen(deviceId, info)
                     backoff.reset()
 
+                    // Liveness breadcrumb: persist the latest heartbeat
+                    // timestamp + device_info snapshot. ShulDisplayApp reads
+                    // this on the next process startup to detect abnormal
+                    // termination (no pending_crash file, but a recent
+                    // last_alive_ms => process was killed by OOM / native /
+                    // ANR rather than throwing).
+                    try {
+                        applicationContext
+                            .getSharedPreferences("liveness", Context.MODE_PRIVATE)
+                            .edit()
+                            .putLong("last_alive_ms", System.currentTimeMillis())
+                            .putString("last_device_info", info.toString())
+                            .apply()
+                    } catch (_: Exception) {}
+
+                    // Opportunistic flush of any logs that were buffered to
+                    // disk while the network was down — the heartbeat
+                    // succeeding means we're back online.
+                    try {
+                        val flushed = LogBuffer.flush(applicationContext)
+                        if (flushed > 0) Log.i(TAG, "Heartbeat flushed $flushed buffered log lines")
+                    } catch (_: Exception) {}
+
                     // Health check every 5th heartbeat (~25 min) - log warnings for critical issues only
                     healthCheckCounter++
                     if (healthCheckCounter % 5 == 0) {
@@ -182,7 +205,8 @@ class DisplayForegroundService : Service() {
                         if (issues.isNotEmpty()) {
                             SupabaseClient.sendLog(deviceId, "WARN",
                                 "Health check: ${issues.joinToString(", ")}",
-                                appVersion = appVersion)
+                                appVersion = appVersion,
+                                appContext = applicationContext)
                         }
                     }
                 } catch (e: Exception) {
@@ -357,7 +381,8 @@ class DisplayForegroundService : Service() {
             SupabaseClient.sendLog(deviceId, "ERROR",
                 "Command failed: ${cmd.command} — ${e.message}",
                 stacktrace = e.stackTraceToString().take(2000),
-                appVersion = appVersion)
+                appVersion = appVersion,
+                appContext = applicationContext)
         }
 
         // 4. Send immediate heartbeat so admin sees updated device state
