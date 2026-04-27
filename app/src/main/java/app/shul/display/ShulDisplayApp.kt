@@ -29,6 +29,18 @@ class ShulDisplayApp : Application() {
         // Send any crash from previous session (using application scope, not bare CoroutineScope)
         sendPendingCrash()
 
+        // Detect & report abnormal termination from previous session (process
+        // killed by OOM, native crash, or anything else that bypassed our
+        // uncaught-exception handler — leaving a recent "alive" timestamp
+        // but no pending_crash file).
+        detectAbnormalTermination()
+
+        // Try to flush any logs buffered to disk while the network was
+        // down. Cheap; no-op when nothing pending.
+        applicationScope.launch {
+            try { LogBuffer.flush(this@ShulDisplayApp) } catch (_: Exception) {}
+        }
+
         // Force light mode globally — must happen before any Activity is created
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
 
@@ -98,6 +110,62 @@ class ShulDisplayApp : Application() {
                 Log.e("ShulDisplayApp", "Failed to log crash to Supabase")
             }
             defaultHandler?.uncaughtException(thread, throwable)
+        }
+    }
+
+    /**
+     * If the previous session was alive recently and didn't leave a
+     * pending_crash file behind, the process was terminated abnormally —
+     * almost always an OOM kill or native crash that our uncaught-exception
+     * handler can't see. Log a synthetic ABNORMAL_TERMINATION entry with
+     * the last-known device state so we can diagnose remotely.
+     */
+    private fun detectAbnormalTermination() {
+        try {
+            val livePrefs = getSharedPreferences("liveness", MODE_PRIVATE)
+            val crashPrefs = getSharedPreferences("crash_data", MODE_PRIVATE)
+
+            val lastAlive = livePrefs.getLong("last_alive_ms", 0L)
+            val hasPendingCrash = crashPrefs.contains("pending_crash_stack")
+            val lastInfo = livePrefs.getString("last_device_info", null)
+
+            // Reset for the new session — we'll start writing fresh in the
+            // heartbeat loop. Done first so a failure later in this method
+            // doesn't leave a stale heartbeat lurking.
+            livePrefs.edit().remove("last_alive_ms").remove("last_device_info").apply()
+
+            if (lastAlive == 0L) return // first run, nothing to report
+            if (hasPendingCrash) return  // we already have the real crash, sendPendingCrash handles it
+
+            val ageMs = System.currentTimeMillis() - lastAlive
+            // Threshold: if the heartbeat was alive within the last 30 minutes,
+            // the gap until now is suspicious. Anything older than that is
+            // probably just a graceful shutdown that we don't need to report.
+            if (ageMs > 30 * 60 * 1000) return
+
+            applicationScope.launch {
+                try {
+                    val deviceId = DeviceUtils.getDeviceId(this@ShulDisplayApp)
+                    val extra = JSONObject().apply {
+                        put("event", "abnormal_termination")
+                        put("last_alive_ms", lastAlive)
+                        put("gap_ms", ageMs)
+                        if (lastInfo != null) put("last_device_info", JSONObject(lastInfo))
+                    }
+                    SupabaseClient.sendLog(
+                        deviceId = deviceId,
+                        level = "ERROR",
+                        message = "Suspected OOM/abnormal termination — last alive ${ageMs / 1000}s ago, no crash file",
+                        extra = extra,
+                        appVersion = DeviceUtils.getAppVersion(this@ShulDisplayApp),
+                        appContext = this@ShulDisplayApp,
+                    )
+                } catch (e: Exception) {
+                    Log.w("ShulDisplayApp", "Failed to send abnormal-termination log: ${e.message}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("ShulDisplayApp", "detectAbnormalTermination failed: ${e.message}")
         }
     }
 
