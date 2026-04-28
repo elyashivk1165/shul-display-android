@@ -114,6 +114,14 @@ class MainActivity : AppCompatActivity() {
         // Prevent system from adding bottom inset padding (removes white gap on newer Android)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             window.setDecorFitsSystemWindows(false)
+            // Consume all system bar insets so the WebView truly fills the
+            // screen edge-to-edge — without this, even with decorFitsSystemWindows
+            // false, child views (including WebView's measured viewport) can
+            // still receive insets and shrink to leave a gap where the nav bar
+            // would have been.
+            findViewById<View>(android.R.id.content).setOnApplyWindowInsetsListener { _, _ ->
+                WindowInsets.CONSUMED
+            }
         }
         setupKioskMode()
         enableFullscreen()
