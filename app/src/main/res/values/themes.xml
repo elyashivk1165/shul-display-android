@@ -3,6 +3,11 @@
     <style name="Theme.ShulDisplay" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/black</item>
         <item name="android:navigationBarColor">@android:color/black</item>
+        <!-- Black window background — Light parent gave us white. Any sliver
+             of background still showing through (system bars during a focus
+             flash, layout race during recreate) renders as black, not white. -->
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:colorBackground">@android:color/black</item>
     </style>
 
     <style name="Theme.ShulDisplay.Fullscreen" parent="Theme.ShulDisplay">
