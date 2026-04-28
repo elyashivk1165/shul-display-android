@@ -54,6 +54,21 @@ class MainActivity : AppCompatActivity() {
     private val openSettingsRunnable = Runnable { openSettings() }
     private val LONG_PRESS_DURATION_MS = 1500L
 
+    // Safety re-apply of immersive flags. The primary mechanism is the
+    // event-driven listener registered in onCreate (re-hides instantly when
+    // the bar tries to appear); this loop just catches edge cases where the
+    // listener doesn't fire (e.g., bar reappearing without an inset change).
+    private val fullscreenHandler = Handler(Looper.getMainLooper())
+    private val IMMERSIVE_REAPPLY_MS = 1000L
+    private val reapplyImmersiveRunnable = object : Runnable {
+        override fun run() {
+            if (isForeground) {
+                enableFullscreen()
+                fullscreenHandler.postDelayed(this, IMMERSIVE_REAPPLY_MS)
+            }
+        }
+    }
+
     companion object {
         private const val TAG = "MainActivity"
         const val BASE_URL = "https://shul-display.vercel.app/"
@@ -102,6 +117,7 @@ class MainActivity : AppCompatActivity() {
         }
         setupKioskMode()
         enableFullscreen()
+        installImmersiveListeners()
 
         prefs = SecurePrefs.get(this)
         val slug = prefs.getString("slug", "") ?: ""
@@ -650,6 +666,32 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Event-driven immersive recovery: re-hides the system bars the *instant*
+     * they reappear, not on a timer. Combined with the 1s safety loop in
+     * onResume, the bars effectively never become visible to the user.
+     * Called once from onCreate.
+     */
+    private fun installImmersiveListeners() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.decorView.setOnApplyWindowInsetsListener { v, insets ->
+                if (insets.isVisible(WindowInsets.Type.systemBars())) {
+                    enableFullscreen()
+                }
+                v.onApplyWindowInsets(insets)
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.setOnSystemUiVisibilityChangeListener { vis ->
+                @Suppress("DEPRECATION")
+                if ((vis and View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) == 0 ||
+                    (vis and View.SYSTEM_UI_FLAG_FULLSCREEN) == 0) {
+                    enableFullscreen()
+                }
+            }
+        }
+    }
+
     // ── TV remote long press → settings ────────────────────────────────────
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -688,6 +730,7 @@ class MainActivity : AppCompatActivity() {
         super.onPause()
         isForeground = false
         longPressHandler.removeCallbacks(openSettingsRunnable)
+        fullscreenHandler.removeCallbacks(reapplyImmersiveRunnable)
         if (::webView.isInitialized) {
             webView.onPause()
             webView.pauseTimers()
@@ -713,6 +756,9 @@ class MainActivity : AppCompatActivity() {
             webView.onResume()
             webView.resumeTimers()
         }
+        enableFullscreen()
+        fullscreenHandler.removeCallbacks(reapplyImmersiveRunnable)
+        fullscreenHandler.postDelayed(reapplyImmersiveRunnable, IMMERSIVE_REAPPLY_MS)
     }
 
     override fun onDestroy() {
